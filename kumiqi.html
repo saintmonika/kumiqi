@@ -463,6 +463,26 @@ input:focus,textarea:focus{outline:none;border-color:var(--ink-2)}
 .brand{cursor:default;user-select:none}
 .blocky.boop{animation:boop .25s ease}
 @keyframes boop{50%{transform:scale(1.18) rotate(-6deg)}}
+.egg-pop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:24px;background:rgba(18,18,24,.62);animation:epFade .25s ease both}
+.egg-pop.is-out{animation:epFade .22s ease reverse both}
+.ep-card{position:relative;width:min(100%,320px);background:var(--surface);color:var(--ink);border-radius:18px;padding:30px 22px 24px;text-align:center;overflow:hidden;box-shadow:0 24px 60px rgba(0,0,0,.35);animation:epPop .5s cubic-bezier(.2,1.4,.4,1) both}
+.ep-x{position:absolute;top:10px;right:10px;width:34px;height:34px;border-radius:50%;border:0;background:var(--desk-2);color:var(--ink);font:500 20px/1 var(--font-body);cursor:pointer;z-index:3}
+.ep-stage{position:relative;width:150px;height:170px;margin:4px auto 10px;display:grid;place-items:center}
+.ep-burst{position:absolute;inset:-40px;border-radius:50%;background:repeating-conic-gradient(rgba(226,177,60,.28) 0 10deg,transparent 10deg 20deg);-webkit-mask:radial-gradient(circle,#000 30%,transparent 70%);mask:radial-gradient(circle,#000 30%,transparent 70%);animation:epSpin 9s linear infinite,epFade .6s .2s ease both}
+.ep-stamp{position:relative;width:118px;animation:epDrop .7s .15s cubic-bezier(.2,1.5,.4,1) both}
+.ep-stamp .cl-svg{width:100%;height:auto;filter:drop-shadow(0 6px 10px rgba(0,0,0,.25))}
+.ep-k{margin:0;font:600 11.5px/1.3 var(--font-body);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);animation:epUp .4s .55s ease both}
+.ep-card h2{margin:6px 0 8px;font:var(--dw) 24px/1.2 var(--font-display);animation:epUp .4s .65s ease both}
+.ep-how{margin:0;font:14px/1.5 var(--font-body);color:var(--ink-2);animation:epUp .4s .75s ease both}
+.ep-tok{display:inline-block;margin:14px 0 0;padding:6px 12px;border-radius:999px;background:var(--mustard);color:var(--on-mustard);font:600 13px/1 var(--font-body);animation:epUp .4s .9s cubic-bezier(.2,1.6,.4,1) both}
+.ep-confetti{position:absolute;inset:0;pointer-events:none;z-index:2}
+.ep-confetti i{position:absolute;top:-12px;width:7px;height:11px;border-radius:2px;opacity:0;animation:epFall var(--d) ease-in both}
+@keyframes epFade{from{opacity:0}to{opacity:1}}
+@keyframes epPop{from{transform:scale(.85);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes epDrop{0%{transform:translateY(-60px) rotate(-14deg) scale(1.25);opacity:0}100%{transform:rotate(-4deg);opacity:1}}
+@keyframes epUp{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+@keyframes epSpin{to{transform:rotate(360deg)}}
+@keyframes epFall{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(420px) rotate(var(--r))}}
 .pp-cost{font:600 11px/1 var(--font-body);color:var(--ink-3);margin-top:-2px}
 .pp-sw{display:block;width:40px;height:28px;box-shadow:0 1px 3px var(--drop)}
 .pp-sw.paper-notebook{background:var(--paper) repeating-linear-gradient(transparent 0 6px,rgba(40,50,80,.16) 6px 7px)}
@@ -1540,7 +1560,7 @@ function eggFound(id){ return !!(S.eggs && S.eggs[id]); }
 function findEgg(id, delay = 0){
   if(eggFound(id)) return false;
   S.eggs = Object.assign({}, S.eggs, {[id]:now()}); earnTokens(5); save();
-  setTimeout(() => openEgg(id, true), delay);
+  setTimeout(() => showEggPop(id), delay);
   return true;
 }
 function openEgg(id, fresh){
@@ -1570,10 +1590,26 @@ function checkEggs(p, when){
     if(del > add && del > 0 && !eggFound('slate')) found.push('slate');
   }
   found.forEach((id, i) => { S.eggs = Object.assign({}, S.eggs, {[id]:now()}); earnTokens(5); });
-  if(found.length){ save(); setTimeout(() => openEgg(found[0], true), 1700); }
+  if(found.length){ save(); setTimeout(() => showEggPop(found[0]), 1700); }
   return found;
 }
 let winkTaps = [];
+/* The unlock moment: pops up by itself, stays until you close it with the x. */
+function showEggPop(id){
+  const e = EGGS.find(x => x.id === id); if(!e) return;
+  const old = document.getElementById('egg-pop'); if(old) old.remove();
+  const cols = ['#E2B13C', '#D4378A', '#2A7AA6', '#E2513A', '#4F8A57', '#FBFAF6'];
+  const bits = Array.from({length:22}, (_, i) => `<i style="left:${4 + (i * 41) % 92}%;background:${cols[i % cols.length]};animation-delay:${(.35 + (i % 7) * .09).toFixed(2)}s;--r:${(i * 67) % 360}deg;--d:${(1.6 + (i % 5) * .25).toFixed(2)}s"></i>`).join('');
+  const el = document.createElement('div');
+  el.id = 'egg-pop'; el.className = 'egg-pop'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-labelledby', 'ep-title');
+  el.innerHTML = `<div class="ep-card"><button class="ep-x" data-act="egg-pop-close" aria-label="Close">×</button>
+    <div class="ep-confetti" aria-hidden="true">${bits}</div>
+    <div class="ep-stage"><div class="ep-burst" aria-hidden="true"></div><div class="ep-stamp">${e.art()}</div></div>
+    <p class="ep-k">Secret stamp unlocked</p><h2 id="ep-title">${esc(e.name)}</h2>
+    <p class="ep-how">${esc(e.how)}</p><p class="ep-tok">+5 tokens</p></div>`;
+  document.body.appendChild(el);
+  setTimeout(() => { const x = el.querySelector('.ep-x'); if(x) x.focus({preventScroll:true}); }, 50);
+}
 
 /* ---------- first run ---------- */
 /* A new account has nothing connected yet, so the first stamp is already waiting: print it and the loop has started. */
@@ -2504,8 +2540,9 @@ document.addEventListener('click', e => {
     case 'welcome': openWelcome(); break;
     case 'book': openBook(); break;
     case 'egg-open': openEgg(id); break;
+    case 'egg-pop-close': { const ep = document.getElementById('egg-pop'); if(ep){ ep.classList.add('is-out'); setTimeout(() => ep.remove(), 220); } break; }
     case 'egg-hint': toast('A secret. Keep building and you might stumble into it.'); break;
-    case 'mascot': { const t = now(); winkTaps = winkTaps.filter(x => t - x < 3000).concat(t); const m = el.querySelector('.blocky'); if(m){ m.classList.remove('boop'); void m.offsetWidth; m.classList.add('boop'); } if(winkTaps.length >= 7){ winkTaps = []; if(!findEgg('wink')) toast(';)'); } break; }
+    case 'mascot': { const t = now(); if(winkTaps.length && t - winkTaps[winkTaps.length - 1] > 1500) winkTaps = []; winkTaps.push(t); const m = el.querySelector('.blocky'); if(m){ m.classList.remove('boop'); void m.offsetWidth; m.classList.add('boop'); } if(winkTaps.length >= 7){ winkTaps = []; if(!findEgg('wink')) toast(';)'); } break; }
     case 'book-tab': openBook(el.dataset.v); break;
     case 'cl-open': openCollect(id); break;
     case 'buy': buy(id, +el.dataset.cost); break;
