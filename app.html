@@ -1015,6 +1015,19 @@ body.onb-open{overflow:hidden}
 .wall-slot .commit-list{width:100%}
 .wall-slot .commit-list button{background:var(--raised)}
 
+.actbar{align-items:center}
+.tabbtn{display:grid;justify-items:center;gap:2px;width:60px;border:0;background:transparent;color:var(--ink-3);font:500 11.5px/1 var(--font-body);cursor:pointer;padding:6px 0}
+.tabbtn[aria-pressed="true"]{color:var(--ink)}
+.tabbtn svg{width:22px;height:22px}
+.actbar .btn{min-width:0;flex:0 1 128px}
+.crew-line{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:baseline;margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--raised);box-shadow:inset 0 0 0 1px var(--line)}
+.crew-line b{font:var(--dw) 20px/1 var(--font-display)}
+.wk.is-before{opacity:.35}
+.mail-card.is-new{box-shadow:0 0 0 2px var(--accent),var(--shadow)}
+.sec .crew-chip{font-size:15px}
+.earlier .by > span:not(.by-when):not(.by-r){display:none}
+.earlier .by{font-size:11.5px;flex-wrap:nowrap}
+
 </style>
 </head>
 <body>
@@ -1025,9 +1038,11 @@ body.onb-open{overflow:hidden}
   </header>
   <main id="view"><div class="loading" aria-label="Loading"></div></main>
 </div>
-<nav class="actbar" id="actbar" hidden aria-label="Post">
+<nav class="actbar" id="actbar" hidden aria-label="Kumiqi">
+  <button class="tabbtn" data-act="view" data-v="crew" aria-pressed="true"><svg class="i" viewBox="0 0 24 24"><path d="M3 7.5h7l2 2h9v10H3z"/></svg>Crew</button>
   <button class="btn" data-act="stamp"><svg class="i" viewBox="0 0 24 24"><path d="M6 3h12v18H6z" stroke-dasharray="2 2"/><path d="M9 7h6v6H9z"/></svg>Stamp</button>
   <button class="btn ghost" data-act="snap" style="background:var(--raised)"><svg class="i" viewBox="0 0 24 24"><path d="M4 8h3l2-2.5h6L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Snap</button>
+  <button class="tabbtn" data-act="view" data-v="week" aria-pressed="false"><svg class="i" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 12h16M12 4v16"/></svg>Week</button>
 </nav>
 <div class="scrim" id="scrim" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
@@ -1068,7 +1083,7 @@ let uid = 0;
 /* ====== State ====== */
 let sb = null, me = null, profile = null, ghToken = null;
 let crews = [], cur = null, people = {}, members = [], posts = [], reacts = [], urls = {};
-let live = null, reloadTimer = null, booted = false;
+let live = null, reloadTimer = null, booted = false, view = store.get('kq-view') === 'week' ? 'week' : 'crew', myTimes = [], memberSince = {};
 
 /* ====== Small helpers ====== */
 function toast(msg){ const t = $('#toast'); t.textContent = msg; t.classList.add('is-on'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('is-on'), 2800); }
@@ -1322,8 +1337,8 @@ async function loadCrews(){
 async function loadCrew(){
   members = []; posts = []; reacts = [];
   if(!cur) return;
-  const m = await q(sb.from('crew_members').select('user_id').eq('crew_id', cur));
-  members = m.map(x => x.user_id);
+  const m = await q(sb.from('crew_members').select('user_id, joined_at').eq('crew_id', cur));
+  members = m.map(x => x.user_id); memberSince = {}; m.forEach(x => { memberSince[x.user_id] = x.joined_at; });
   const need = members.filter(id => !people[id]);
   if(need.length) (await q(sb.from('profiles').select('*').in('id', need))).forEach(p => { people[p.id] = p; });
   const pc = await q(sb.from('post_crews').select('post_id').eq('crew_id', cur));
@@ -1358,13 +1373,110 @@ function goLive(){
 function stopLive(){ if(live && sb){ sb.removeChannel(live); live = null; } }
 document.addEventListener('visibilitychange', () => { if(!document.hidden && me){ refresh(true); loadTray().then(() => { if($('#scrim').hidden) renderQuiet(); }); } });
 
+/* ====== Weeks, crew streaks and mail day ======
+   A week closes Sunday 8pm. Posts before Monday 9am still count for the week that just closed.
+   Ship anything once a week. Total weeks never goes down; a missed week ends a run (a chapter), unless a Postage Due covers it. */
+const HOUR = 36e5, WK = 7 * DAY;
+const ENV_SVG = `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="1.5"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/></svg>`;
+function nextClose(t){ const d = new Date(t), e = new Date(d); e.setHours(20, 0, 0, 0); e.setDate(e.getDate() + ((7 - e.getDay()) % 7)); if(e <= d) e.setDate(e.getDate() + 7); return e; }
+function weekEnd(t){ const e = nextClose(t), prev = new Date(e); prev.setDate(prev.getDate() - 7); return (new Date(t) - prev) < 13 * HOUR ? prev : e; }
+const wkKey = d => new Date(d).toDateString();
+const lastClose = () => { const p = nextClose(Date.now()); p.setDate(p.getDate() - 7); return p; };
+const md = t => new Date(t).toLocaleDateString('en-US', {month:'short', day:'numeric'});
+function runInfo(times){
+  const cur = nextClose(Date.now()), keys = new Set(times.map(t => wkKey(weekEnd(t))));
+  const log = [], chapters = []; let run = 0, total = 0, freezes = 0, since = 0, from = null, last = null;
+  if(times.length){
+    const first = new Date(Math.min(...times.map(t => weekEnd(t).getTime())));
+    for(const d = new Date(first); d < cur; d.setDate(d.getDate() + 7)){
+      if(keys.has(wkKey(d))){ total++; run++; since++; from = from || new Date(d); last = new Date(d); if(since >= 4){ freezes = Math.min(freezes + 1, 2); since = 0; } log.push('s'); }
+      else if(run > 0 && freezes > 0){ freezes--; log.push('d'); }
+      else { if(run > 0) chapters.push({weeks:run, from, to:last}); run = 0; since = 0; from = null; log.push('m'); }
+    }
+  }
+  const now = keys.has(wkKey(cur)); if(now){ total++; run++; } log.push(now ? 's' : 'o');
+  while(log.length < 12) log.unshift('b');
+  return {total, run, freezes, chapters:chapters.reverse(), log:log.slice(-12), shippedNow:now};
+}
+function wkCell(c, i, n, color){
+  const back = n - 1 - i, label = {s:'Shipped', d:'Saved by Postage Due', m:'Missed', o:'This week, still open', b:'Before you started'}[c];
+  return `<span class="wk wk-${c === 'b' ? 'm is-before' : c}" style="--wk:${color}" role="img" aria-label="${back === 0 ? 'This week' : back + (back === 1 ? ' week' : ' weeks') + ' ago'}: ${label}"><i>${c === 'd' ? 'DUE' : c === 'o' ? 'now' : ''}</i></span>`;
+}
+/* Who showed up in a crew, week by week: a post or a reaction counts. */
+function crewActivity(){
+  const act = {};
+  const add = (id, t) => { const k = wkKey(weekEnd(t)); (act[k] = act[k] || new Set()).add(id); };
+  posts.forEach(p => add(p.author, p.created_at)); reacts.forEach(r => add(r.user_id, r.created_at));
+  return act;
+}
+function crewStreak(upTo){
+  const act = crewActivity(), d = new Date(upTo || lastClose()); let n = 0;
+  for(let i = 0; i < 52; i++){
+    const start = new Date(d); start.setDate(start.getDate() - 7);
+    const need = members.filter(id => !memberSince[id] || new Date(memberSince[id]) < start);
+    if(need.length < 2) break;
+    const got = act[wkKey(d)] || new Set();
+    if(!need.every(id => got.has(id))) break;
+    n++; d.setDate(d.getDate() - 7);
+  }
+  return n;
+}
+function mailKey(c){ return `kq-mail-${c.id}-${wkKey(lastClose())}`; }
+function lastWeekPosts(){ const k = wkKey(lastClose()); return posts.filter(p => wkKey(weekEnd(p.created_at)) === k); }
+function mailCardHTML(c){
+  const diff = nextClose(Date.now()) - Date.now(), d = Math.floor(diff / DAY), h = Math.floor((diff % DAY) / HOUR), m = Math.floor((diff % HOUR) / 6e4);
+  const arrived = new Date(c.created_at) < lastClose() && lastWeekPosts().length && !store.get(mailKey(c));
+  return arrived
+    ? `<div class="mail-card is-new"><span class="mail-ic">${ENV_SVG}</span><div class="mail-t"><p class="eyebrow">Mail day</p><b style="font-size:20px">Your crew's week arrived</b><span class="muted small">${md(new Date(lastClose()) - 6 * DAY)} to ${md(lastClose())}</span></div><button class="btn small" data-act="mailday">Open</button></div>`
+    : `<div class="mail-card"><span class="mail-ic">${ENV_SVG}</span><div class="mail-t"><p class="eyebrow">Mail day</p><b>${d > 0 ? `${d}d ${h}h` : `${h}h ${m}m`}</b><span class="muted small">until this week arrives, Sunday 8pm</span></div></div>`;
+}
+function openMailDay(){
+  const c = curCrew(); if(!c) return;
+  const wk = lastWeekPosts(), end = lastClose(), start = new Date(end - 6 * DAY);
+  const act = crewActivity()[wkKey(end)] || new Set(), need = members.filter(id => !memberSince[id] || new Date(memberSince[id]) < new Date(end - WK));
+  const all = need.length >= 2 && need.every(id => act.has(id)), now = crewStreak(end), before = all ? now - 1 : crewStreak(new Date(end - WK));
+  const authors = [...new Set(wk.map(p => p.author))];
+  const rows = authors.map(a => { const ps = wk.filter(p => p.author === a).sort((x, y) => new Date(x.created_at) - new Date(y.created_at));
+    return `<div class="md-row"><div class="md-who">${avatar(a)}<b>${esc(handleOf(a))}</b><span class="up-tag is-in">${ps.length} ${ps.length === 1 ? 'post' : 'posts'}</span></div><div class="mini-row">${ps.map(p => `<div class="hit" role="button" tabindex="0" data-act="open" data-id="${p.id}">${pieceHTML(p, 'sm')}</div>`).join('')}</div></div>`; }).join('');
+  store.set(mailKey(c), '1');
+  openSheet(`<div class="mailday">
+    <div class="md-env" aria-hidden="true"><div class="env-back"></div><div class="env-letter"><span>${esc(c.name)}</span><span>${md(start)} to ${md(end)}</span></div><div class="env-front"></div><div class="env-flap"></div><span class="env-seal">組</span></div>
+    <p class="eyebrow" style="text-align:center">Mail day · ${md(start)} to ${md(end)}</p>
+    <h2 id="sheet-title" style="text-align:center">The week, all together</h2>
+    <div style="display:flex;justify-content:center">${crewChip(c)}</div>
+    ${need.length >= 2 ? `<div class="md-streak ${all ? 'is-up' : ''}"><span class="md-old">${before}</span><span class="md-arrow">→</span><span class="md-new">${all ? now : 0}</span><span class="md-lbl">${all ? 'Everyone showed up. Crew streak up.' : 'A quiet week for some. The streak starts fresh this week.'}</span></div>` : ''}
+    <div class="md-rows">${rows || '<p class="muted" style="text-align:center">A quiet week.</p>'}</div></div>`);
+  const env = $('.md-env'); if(env) requestAnimationFrame(() => setTimeout(() => env.classList.add('is-open'), 250));
+  renderQuiet();
+}
+function weekViewHTML(){
+  const r = runInfo(myTimes), c = curCrew(), color = c ? (HEX.test(safeColor(c.color)) ? c.color : `var(--${safeColor(c.color)})`) : 'var(--magenta)';
+  const streak = c ? crewStreak() : 0;
+  const shown = c ? new Set(posts.filter(p => isThisWeek(p.created_at)).map(p => p.author).concat(reacts.filter(x => isThisWeek(x.created_at)).map(x => x.user_id)).filter(id => members.includes(id))) : new Set();
+  return `<section aria-label="Your weeks">
+    <div class="view-head"><h1>Your weeks</h1></div>
+    <div class="weeks-card">
+      <div class="wc-top"><div><p class="eyebrow">Weeks shipped</p><b class="wc-total">${r.total}</b><p class="muted small" style="margin:0">This number never goes down.</p></div>
+        <div class="wc-run"><b>${r.run}</b><span>week run</span></div></div>
+      <div class="wkstrip">${r.log.map((x, i) => wkCell(x, i, r.log.length, color)).join('')}</div>
+      <p class="muted small" style="margin:0">${r.shippedNow ? 'This week is in. See you next week.' : 'Ship anything this week (a stamp or a snap) to keep your run going.'}${r.freezes ? ` You have ${r.freezes} Postage Due saved for a week you miss.` : ''}</p>
+      ${r.chapters.length ? `<details class="custom"><summary>Past runs <span>${r.chapters.length}</span></summary><ul class="chapters" style="margin-top:12px">${r.chapters.map((ch, i) => `<li><span class="ch-n">Chapter ${r.chapters.length - i}</span><span>${ch.weeks} ${ch.weeks === 1 ? 'week' : 'weeks'}</span><span class="muted small">ended ${md(ch.to)}</span></li>`).join('')}</ul></details>` : ''}
+    </div>
+    ${c ? `<h2 class="sec">${crewChip(c)}</h2>${mailCardHTML(c)}
+      <div class="crew-line"><span><b>${streak}</b> ${streak === 1 ? 'week' : 'weeks'} crew streak</span><span class="muted">${members.length < 2 ? 'Crew streaks start when someone joins.' : `${shown.size} of ${members.length} showed up this week`}</span></div>
+      <p class="muted small">A week counts for the crew when everyone posts or reacts.</p>` : ''}
+  </section>`;
+}
+
 /* ====== Views ====== */
 function render(){
   $('#top').hidden = false;
   $('#me-btn').innerHTML = profile ? avatar(profile.id) : '';
   const crew = curCrew();
   $('#actbar').hidden = !crew;
+  $$('#actbar [data-act=view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === view)));
   if(!crew){ $('#view').innerHTML = firstCrewHTML(); return; }
+  if(view === 'week'){ $('#view').innerHTML = weekViewHTML(); return; }
   const tabs = crews.map(c => `<button class="crew-tab" role="tab" aria-selected="${c.id === crew.id}" style="${crewVars(c)}" data-act="crew" data-id="${c.id}">${esc(c.name)}</button>`).join('')
     + `<button class="crew-tab is-new" data-act="new-crew" aria-label="Make a new crew">+ New</button>`;
   const shown = new Set(posts.filter(p => isThisWeek(p.created_at)).map(p => p.author).concat(reacts.filter(r => isThisWeek(r.created_at)).map(r => r.user_id)).filter(id => members.includes(id)));
@@ -1372,10 +1484,11 @@ function render(){
   $('#view').innerHTML = `<section aria-label="Crew">
     <div class="crew-tabs" role="tablist" aria-label="Your crews">${tabs}</div>
     <div class="crew-folder" style="${esc(folderStyle(crew))}">
-      <div class="crew-top"><div><h1 class="crew-name">${esc(crew.name)}</h1><p class="crew-kind">${esc(kindLabel(crew.kind))}</p></div></div>
+      <div class="crew-top"><div><h1 class="crew-name">${esc(crew.name)}</h1><p class="crew-kind">${esc(kindLabel(crew.kind))}</p></div>${members.length >= 2 ? (n => `<button class="streak" data-act="view" data-v="week" aria-label="${n} week crew streak"><span><b>${n}</b>${n === 1 ? 'week' : 'weeks'}</span></button>`)(crewStreak()) : ''}</div>
       <div class="crew-mid"><div class="avs">${members.slice(0, 8).map(id => avatar(id)).join('')}</div><p class="crew-status">${status}</p></div>
       <div class="crew-actions"><button class="btn on-folder small" data-act="invite">Invite someone</button>${crew.created_by === me.id ? '<button class="btn on-folder ghost small" data-act="edit-crew">Edit crew</button>' : ''}</div>
     </div>
+    ${new Date(crew.created_at) < lastClose() && lastWeekPosts().length && !store.get(mailKey(crew)) ? mailCardHTML(crew) : ''}
     <h2 class="sec wall-head">This week</h2>
     <div class="wall2">${wallHTML()}</div></section>`;
 }
@@ -1510,6 +1623,7 @@ async function postSnap(form){
 async function publish(row, to){
   const p = (await q(sb.from('posts').insert(row).select()))[0];
   if(row.clip) [row.clip.sha].concat(row.clip.shas || []).forEach(x => x && myShas.add(x));
+  myTimes.push(p.created_at);
   await q(sb.from('post_crews').insert(to.map(crew_id => ({post_id:p.id, crew_id}))));
   closeSheet(); if(!to.includes(cur)) cur = to[0];
   await loadCrew(); render(); scrollTo({top:0, behavior:'smooth'});
@@ -1570,7 +1684,8 @@ async function loadTray(force){
   }catch(e){ tray = tray || []; }
 }
 async function loadMyShas(){
-  try{ myShas = new Set((await q(sb.from('posts').select('clip').eq('author', me.id))).flatMap(p => p.clip ? [p.clip.sha].concat(p.clip.shas || []) : []).filter(Boolean)); }catch(e){}
+  try{ const mine = await q(sb.from('posts').select('clip, created_at').eq('author', me.id));
+    myShas = new Set(mine.flatMap(p => p.clip ? [p.clip.sha].concat(p.clip.shas || []) : []).filter(Boolean)); myTimes = mine.map(p => p.created_at); }catch(e){}
 }
 const freshTray = () => (tray || []).filter(c => !c.shas.some(x => myShas.has(x)));
 function commitListHTML(list){
@@ -1746,6 +1861,8 @@ document.addEventListener('click', async e => {
     case 'edit-crew': openEditCrew(); break;
     case 'pick-kind': { const f = el.closest('form'); $$('[data-act=pick-kind]', f).forEach(b => b.setAttribute('aria-pressed', String(b === el))); f.querySelector('[name=kind]').value = v; crewPreview(); break; }
     case 'invite': openInvite(); break;
+    case 'view': view = v; store.set('kq-view', v); closeSheet(); render(); scrollTo(0, 0); break;
+    case 'mailday': openMailDay(); break;
     case 'copy': try{ await navigator.clipboard.writeText(v); toast('Link copied.'); }catch(err){ const i = $('#inv-link'); if(i){ i.select(); } toast('Select the link and copy it.'); } break;
     case 'share': try{ await navigator.share({text:v}); }catch(err){} break;
     case 'snap': openSnap(); break;
