@@ -959,7 +959,7 @@ body.onb-open{overflow:hidden}
 .actbar .btn svg{width:19px;height:19px}
 
 .sheet-body-grid{display:grid;gap:18px}
-.sheet .lead{margin:-8px 0 0;color:var(--ink-2)}
+.sheet .lead{margin:0;color:var(--ink-2)}
 .preview{width:min(100%,260px);margin:2px auto 0}
 .preview.wide{width:min(100%,300px)}
 .photo-pick{position:relative}
@@ -993,6 +993,20 @@ body.onb-open{overflow:hidden}
 @media (prefers-reduced-motion: reduce){.loading .blocky{animation:none}}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
+.invite-to{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.crew-chip{display:inline-block;max-width:100%;padding:5px 11px;border-radius:7px;background:var(--fc);color:var(--fc-ink);font:600 14px/1.2 var(--font-body);overflow-wrap:anywhere}
+.sheet h2 + .sheet-body-grid{margin-top:14px}
+
+.cover-row{display:flex;gap:8px;flex-wrap:wrap}
+.cover-row .photo-pick{position:relative;overflow:hidden}
+.crew-prev{pointer-events:none}
+.crew-prev .crew-folder{min-height:96px;align-content:end;gap:2px}
+.crew-prev .crew-name{font-size:24px}
+.crew-prev .crew-tab{display:inline-block;cursor:default}
+.crew-folder{background-repeat:repeat}
+.sw.sw-pick[aria-pressed="true"]{box-shadow:0 0 0 2px var(--surface),0 0 0 4.5px var(--ink)}
+.sw.sw-pick{background:conic-gradient(#E2513A,#E2B13C,#4F8A57,#2A7AA6,#C62F7F,#E2513A)}
+
 </style>
 </head>
 <body>
@@ -1016,6 +1030,7 @@ body.onb-open{overflow:hidden}
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script src="config.js"></script>
 <script>
 (function(){
 'use strict';
@@ -1024,7 +1039,8 @@ body.onb-open{overflow:hidden}
    Supabase → Project Settings → API Keys. It's meant to be public: the security rules in the database protect the data.
    Never put the secret / service_role key here. */
 const SUPABASE_URL = 'https://emxgbxpklwudbbogvouj.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_QEF1q3C6yZhGCmYN39lfwg_X26PC2_I';
+/* The key lives in config.js (next to this file), so updating app.html never wipes it. */
+const SUPABASE_KEY = (window.KUMIQI_KEY || 'PASTE_YOUR_PUBLISHABLE_KEY_HERE').trim();
 
 const APP_URL = location.origin + location.pathname;
 const COLORS = ['magenta', 'sea', 'moss', 'mustard', 'vermilion', 'night'];
@@ -1070,6 +1086,47 @@ function weekStart(){
 }
 const isThisWeek = t => new Date(t).getTime() >= weekStart();
 const curCrew = () => crews.find(c => c.id === cur) || null;
+const KINDS = [['friends', 'Friends', 'Friend crew'], ['project', 'Project', 'Project crew'], ['club', 'Club', 'Club'], ['program', 'Program', 'Program']];
+const kindLabel = k => (KINDS.find(x => x[0] === k) || KINDS[0])[2];
+/* Crew names can be anything, so show them as a colored tag instead of dropping them into a sentence. */
+const crewChip = c => `<span class="crew-chip" style="${crewVars(c)}">${esc(c.name)}</span>`;
+/* ---- Crew looks: one of the six inks, any color, a pattern, or a cover photo ---- */
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const safeColor = c => COLORS.includes(c) || HEX.test(c || '') ? c : 'magenta';
+function crewVars(c){ const col = safeColor(c && c.color); return HEX.test(col) ? `--fc:${col};--fc-ink:${inkText(col)}` : `--fc:var(--${col});--fc-ink:var(--on-${col})`; }
+const PATTERNS = [['', 'None'], ['dots', 'Dots'], ['grid', 'Grid'], ['stripes', 'Stripes'], ['waves', 'Waves'], ['checks', 'Checks']];
+function patternURL(kind, ink){
+  const t = {
+    dots:[14, `<circle cx="7" cy="7" r="1.7" fill="${ink}"/>`],
+    grid:[18, `<path d="M0 .5H18M.5 0V18" stroke="${ink}" stroke-width="1"/>`],
+    stripes:[16, `<path d="M-4 4L4 -4M0 16L16 0M12 20L20 12" stroke="${ink}" stroke-width="3"/>`],
+    waves:[24, `<g fill="none" stroke="${ink}" stroke-width="1.2"><path d="M0 12a12 12 0 0 1 24 0M4 12a8 8 0 0 1 16 0M8 12a4 4 0 0 1 8 0"/><path d="M-12 24a12 12 0 0 1 24 0M-8 24a8 8 0 0 1 16 0M-4 24a4 4 0 0 1 8 0M12 24a12 12 0 0 1 24 0M16 24a8 8 0 0 1 16 0M20 24a4 4 0 0 1 8 0"/></g>`],
+    checks:[20, `<path d="M0 0h10v10H0zM10 10h10v10H10z" fill="${ink}"/>`]
+  }[kind];
+  if(!t) return '';
+  return `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="${t[0]}" height="${t[0]}" viewBox="0 0 ${t[0]} ${t[0]}">${t[1]}</svg>`)}")`;
+}
+function baseHex(c){ const col = safeColor(c && c.color); return HEX.test(col) ? col : INKS[col]; }
+function folderStyle(c, coverSrc){
+  let st = crewVars(c);
+  const cover = coverSrc || (c.cover_path && imgUrl(c.cover_path));
+  if(cover) st += `;background:linear-gradient(rgba(10,10,14,.28),rgba(10,10,14,.62)),url('${cover}') center/cover;--fc-ink:#FFFFFF`;
+  else if(c.pattern){ const ink = inkText(baseHex(c)) === '#1B1B20' ? 'rgba(27,27,32,.16)' : 'rgba(255,255,255,.16)'; st += `;background-image:${patternURL(c.pattern, ink)}`; }
+  return st;
+}
+function darken(hex, k){ const n = parseInt(hex.slice(1), 16), f = v => Math.round(v * (1 - k)).toString(16).padStart(2, '0'); return '#' + f(n >> 16) + f(n >> 8 & 255) + f(n & 255); }
+/* The main color of a photo (colorful pixels count more), darkened if it's too light to read on. */
+async function photoColor(src){
+  try{
+    const img = await loadImg(src), c = document.createElement('canvas'); c.width = c.height = 24;
+    const g = c.getContext('2d', {willReadFrequently:true}); g.drawImage(img, 0, 0, 24, 24);
+    const d = g.getImageData(0, 0, 24, 24).data; let r = 0, gg = 0, b = 0, w = 0;
+    for(let i = 0; i < d.length; i += 4){ const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]), wt = .15 + (mx ? (mx - mn) / mx : 0) ** 2; r += d[i] * wt; gg += d[i + 1] * wt; b += d[i + 2] * wt; w += wt; }
+    let hex = '#' + [r, gg, b].map(v => Math.round(v / w).toString(16).padStart(2, '0')).join('');
+    if(inkText(hex) === '#1B1B20') hex = darken(hex, .35);
+    return hex;
+  }catch(e){ return null; }
+}
 const handleOf = id => people[id] ? '@' + people[id].handle : 'someone';
 const nameOf = id => (people[id] && (people[id].name || people[id].handle)) || 'Someone';
 
@@ -1089,7 +1146,7 @@ const ICON = {
   github:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>'
 };
 const srcShort = p => ({github:'GitHub', screenshot:'Screenshot', photo:'Photo', link:'Link'})[p.source] || 'Made';
-function inkFor(p){ const c = crews.find(x => x.id === p._crew) || curCrew(); return INKS[(c && c.color) || 'sea'] || INKS.sea; }
+function inkFor(p){ const c = crews.find(x => x.id === p._crew) || curCrew(); const h = c ? baseHex(c) : INKS.sea; return inkText(h) === '#1B1B20' ? darken(h, .35) : h; }
 function inkText(hex){ const n = parseInt(String(hex).slice(1), 16); if(isNaN(n)) return '#FBFAF6'; const l = (0.299 * (n >> 16) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255)) / 255; return l > .62 ? '#1B1B20' : '#FBFAF6'; }
 function imgUrl(path){ const u = path && urls[path]; return u ? u.url : ''; }
 function artKind(p){ return p.image_path && imgUrl(p.image_path) ? 'image' : p.clip && p.clip.type === 'terminal' && p.clip.lines ? 'term' : 'type'; }
@@ -1204,7 +1261,7 @@ async function boot(){
   if(data && data.session) start(data.session); else renderSignedOut();
 }
 function renderSetup(){
-  $('#view').innerHTML = `<div class="setup">${MASCOT}<h1 class="sec" style="margin:0">Almost there</h1><p>Paste your Supabase <b>publishable key</b> into this file where it says <code>PASTE_YOUR_PUBLISHABLE_KEY_HERE</code>, then upload it again.</p><p class="muted small">${window.supabase ? '' : 'The sign-in library didn\'t load. Check your connection.'}</p></div>`;
+  $('#view').innerHTML = `<div class="setup">${MASCOT}<h1 class="sec" style="margin:0">Almost there</h1><p>Kumiqi can't find your key. Put your Supabase <b>publishable key</b> in <code>config.js</code> (next to app.html) where it says <code>PASTE_YOUR_PUBLISHABLE_KEY_HERE</code>, then upload config.js.</p><p class="muted small">${window.supabase ? '' : 'The sign-in library didn\'t load. Check your connection.'}</p></div>`;
   $('#actbar').hidden = true; $('#top').hidden = true;
 }
 async function renderSignedOut(){
@@ -1215,7 +1272,7 @@ async function renderSignedOut(){
     try{
       const rows = await q(sb.rpc('crew_preview', {invite:code}));
       const c = rows && rows[0];
-      if(c) invite = `<div class="invite-card" style="--fc:var(--${esc(c.color)});--fc-ink:var(--on-${esc(c.color)})"><span class="ic-k">@${esc(c.invited_by)} invited you to</span><span class="ic-n">${esc(c.name)}</span><span class="ic-m">${c.members} ${c.members === 1 ? 'member' : 'members'} · sign in to join</span></div>`;
+      if(c) invite = `<div class="invite-card" style="${crewVars(c)}"><span class="ic-k">@${esc(c.invited_by)} invited you to</span><span class="ic-n">${esc(c.name)}</span><span class="ic-m">${c.members} ${c.members === 1 ? 'member' : 'members'} · sign in to join</span></div>`;
       else { store.del('kq-invite'); invite = `<p class="form-err">That invite link doesn't work anymore. Ask for a new one.</p>`; }
     }catch(e){ invite = ''; }
   }
@@ -1251,6 +1308,7 @@ async function loadCrews(){
   crews = ids.length ? await q(sb.from('crews').select('*').in('id', ids).order('created_at', {ascending:true})) : [];
   if(!crews.find(c => c.id === cur)) cur = crews.length ? crews[0].id : null;
   if(cur) store.set('kq-crew', cur);
+  await signUrls(crews.map(c => c.cover_path).filter(Boolean));
 }
 async function loadCrew(){
   members = []; posts = []; reacts = [];
@@ -1298,23 +1356,23 @@ function render(){
   const crew = curCrew();
   $('#actbar').hidden = !crew;
   if(!crew){ $('#view').innerHTML = firstCrewHTML(); return; }
-  const tabs = crews.map(c => `<button class="crew-tab" role="tab" aria-selected="${c.id === crew.id}" style="--fc:var(--${esc(c.color)});--fc-ink:var(--on-${esc(c.color)})" data-act="crew" data-id="${c.id}">${esc(c.name)}</button>`).join('')
+  const tabs = crews.map(c => `<button class="crew-tab" role="tab" aria-selected="${c.id === crew.id}" style="${crewVars(c)}" data-act="crew" data-id="${c.id}">${esc(c.name)}</button>`).join('')
     + `<button class="crew-tab is-new" data-act="new-crew" aria-label="Make a new crew">+ New</button>`;
   const shown = new Set(posts.filter(p => isThisWeek(p.created_at)).map(p => p.author).concat(reacts.filter(r => isThisWeek(r.created_at)).map(r => r.user_id)).filter(id => members.includes(id)));
   const status = members.length < 2 ? 'Just you so far. Invite your crew.' : `${shown.size} of ${members.length} showed up this week`;
   $('#view').innerHTML = `<section aria-label="Crew">
     <div class="crew-tabs" role="tablist" aria-label="Your crews">${tabs}</div>
-    <div class="crew-folder" style="--fc:var(--${esc(crew.color)});--fc-ink:var(--on-${esc(crew.color)})">
-      <div class="crew-top"><div><h1 class="crew-name">${esc(crew.name)}</h1><p class="crew-kind">${crew.kind === 'project' ? 'Project crew' : 'Friend crew'}</p></div></div>
+    <div class="crew-folder" style="${esc(folderStyle(crew))}">
+      <div class="crew-top"><div><h1 class="crew-name">${esc(crew.name)}</h1><p class="crew-kind">${esc(kindLabel(crew.kind))}</p></div></div>
       <div class="crew-mid"><div class="avs">${members.slice(0, 8).map(id => avatar(id)).join('')}</div><p class="crew-status">${status}</p></div>
-      <div class="crew-actions"><button class="btn on-folder small" data-act="invite">Invite to ${esc(crew.name)}</button></div>
+      <div class="crew-actions"><button class="btn on-folder small" data-act="invite">Invite someone</button>${crew.created_by === me.id ? '<button class="btn on-folder ghost small" data-act="edit-crew">Edit crew</button>' : ''}</div>
     </div>
     <h2 class="sec wall-head">This week</h2>
     <div class="wall2">${wallHTML()}</div></section>`;
 }
 function firstCrewHTML(){
   return `<section class="first-crew"><h1>Make your first crew</h1><p>A crew is a few friends you build with. You'll each see what the others made this week.</p>
-    <form class="sheet-body-grid" data-form="crew">${crewFields('', 'magenta')}<button class="btn btn-wide" type="submit">Make the crew</button></form>
+    <button class="btn btn-wide" data-act="new-crew">Make a crew</button>
     <p class="muted small">Got an invite link from a friend? Open it on this phone and you'll join their crew.</p></section>`;
 }
 function itemHTML(p, flag){
@@ -1338,22 +1396,53 @@ function wallHTML(){
 }
 
 /* ====== Crews ====== */
-function crewFields(name, color){
-  return `<div class="field"><label for="cr-name">Crew name</label><input id="cr-name" name="name" maxlength="40" required placeholder="Night Owls" value="${esc(name)}"></div>
-    <fieldset class="field"><legend>Color</legend><div class="swatches">${COLORS.map(c => `<button type="button" class="sw" style="--sw:var(--${c})" data-act="pick-color" data-v="${c}" aria-pressed="${c === color}" aria-label="${c}"></button>`).join('')}</div><input type="hidden" name="color" value="${esc(color)}"></fieldset>
-    <fieldset class="field"><legend>Kind</legend><div class="seg"><button type="button" data-act="pick-kind" data-v="friends" aria-pressed="true">Friends</button><button type="button" data-act="pick-kind" data-v="project" aria-pressed="false">Project</button></div><input type="hidden" name="kind" value="friends"></fieldset>`;
+let crewDraft = null;
+function crewFields(c){
+  const col = safeColor(c.color), hex = HEX.test(col) ? col : '#3A7BD5';
+  return `<div class="field"><label for="cr-name">Crew name</label><input id="cr-name" name="name" maxlength="40" required value="${esc(c.name || '')}" autocomplete="off"></div>
+    <fieldset class="field"><legend>Kind</legend><div class="seg">${KINDS.map(([v, label]) => `<button type="button" data-act="pick-kind" data-v="${v}" aria-pressed="${v === (c.kind || 'friends')}">${label}</button>`).join('')}</div><input type="hidden" name="kind" value="${esc(c.kind || 'friends')}"></fieldset>
+    <fieldset class="field"><legend>Color</legend><div class="swatches">${COLORS.map(x => `<button type="button" class="sw" style="--sw:var(--${x})" data-act="pick-color" data-v="${x}" aria-pressed="${x === col}" aria-label="${x}"></button>`).join('')}<label class="sw sw-pick" aria-label="Any color" aria-pressed="${HEX.test(col)}" title="Any color"><input type="color" id="cr-hex" value="${hex}"></label></div><input type="hidden" name="color" value="${esc(col)}"></fieldset>
+    <fieldset class="field"><legend>Pattern</legend><div class="seg">${PATTERNS.map(([v, label]) => `<button type="button" data-act="pick-pattern" data-v="${v}" aria-pressed="${v === (c.pattern || '')}">${label}</button>`).join('')}</div><input type="hidden" name="pattern" value="${esc(c.pattern || '')}"></fieldset>
+    <div class="field"><span class="lbl">Cover photo <span class="muted">(optional)</span></span><div class="cover-row"><label class="btn ghost small photo-pick"><span id="cr-cover-l">${c.cover_path ? 'Change photo' : 'Add a photo'}</span><input type="file" accept="image/*" id="cr-cover"></label><button type="button" class="btn ghost small" data-act="remove-cover"${c.cover_path ? '' : ' hidden'}>Remove photo</button></div><span class="muted small">The crew takes its color from the photo.</span></div>
+    <div class="crew-prev" id="cr-prev" aria-hidden="true"></div>`;
 }
-function openNewCrew(){
-  openSheet(`<h2 id="sheet-title">New crew</h2><form class="sheet-body-grid" data-form="crew">${crewFields('', COLORS[crews.length % COLORS.length])}<button class="btn btn-wide" type="submit">Make the crew</button></form>`);
+function crewFormSheet(c, title, cta){
+  crewDraft = {id:c.id || null, file:null, src:'', cover_path:c.cover_path || null, remove:false};
+  onClose = () => { if(crewDraft && crewDraft.src) URL.revokeObjectURL(crewDraft.src); crewDraft = null; };
+  openSheet(`<h2 id="sheet-title">${title}</h2><form class="sheet-body-grid" data-form="crew">${crewFields(c)}<button class="btn btn-wide" type="submit">${cta}</button></form>`, crewPreview);
+}
+function openNewCrew(){ crewFormSheet({color:COLORS[crews.length % COLORS.length]}, 'New crew', 'Make the crew'); }
+function openEditCrew(){ const c = curCrew(); if(c) crewFormSheet(c, 'Edit crew', 'Save'); }
+function crewFormValues(form){
+  const f = new FormData(form);
+  return {name:String(f.get('name') || '').trim(), kind:String(f.get('kind') || 'friends'), color:safeColor(String(f.get('color'))), pattern:String(f.get('pattern') || '') || null};
+}
+function crewPreview(){
+  const form = $('form[data-form=crew]'), el = $('#cr-prev'); if(!form || !el) return;
+  const v = crewFormValues(form), c = {...v, cover_path:crewDraft && !crewDraft.remove ? crewDraft.cover_path : null};
+  const src = crewDraft && crewDraft.src ? crewDraft.src : '';
+  el.innerHTML = `<div class="crew-tabs"><span class="crew-tab" aria-selected="true" style="${crewVars(c)}">${esc(v.name || 'Your crew')}</span></div><div class="crew-folder" style="${esc(folderStyle(c, src))}"><span class="crew-name">${esc(v.name || 'Your crew')}</span><span class="crew-kind">${esc(kindLabel(v.kind))}</span></div>`;
 }
 async function makeCrew(form){
-  const f = new FormData(form), name = String(f.get('name') || '').trim();
-  if(!name){ toast('Give your crew a name.'); return; }
-  const btn = form.querySelector('[type=submit]'); btn.disabled = true;
+  const v = crewFormValues(form);
+  if(!v.name){ toast('Give your crew a name.'); return; }
+  const btn = form.querySelector('[type=submit]'), label = btn.textContent; btn.disabled = true;
   try{
-    const row = (await q(sb.from('crews').insert({name, color:f.get('color'), kind:f.get('kind')}).select()))[0];
-    cur = row.id; closeSheet(); await loadCrews(); await loadCrew(); render(); toast(`${name} is ready. Invite your crew.`); openInvite();
-  }catch(e){ toast(errMsg(e)); btn.disabled = false; }
+    let cover_path = crewDraft.remove ? null : crewDraft.cover_path;
+    if(crewDraft.file){
+      const blob = await shrink(crewDraft.file);
+      cover_path = `${me.id}/cover-${crypto.randomUUID()}.jpg`;
+      await q(sb.storage.from('snaps').upload(cover_path, blob, {contentType:'image/jpeg', upsert:false}));
+    }
+    const row = {...v, cover_path};
+    if(crewDraft.id){
+      await q(sb.from('crews').update(row).eq('id', crewDraft.id));
+      closeSheet(); await loadCrews(); render(); toast('Saved.');
+    } else {
+      const made = (await q(sb.from('crews').insert(row).select()))[0];
+      cur = made.id; closeSheet(); await loadCrews(); await loadCrew(); render(); toast('Your crew is ready. Invite someone.'); openInvite();
+    }
+  }catch(e){ toast(errMsg(e)); btn.disabled = false; btn.textContent = label; }
 }
 function inviteLink(c){ return `${APP_URL}?c=${c.code}`; }
 function openInvite(){
@@ -1361,8 +1450,8 @@ function openInvite(){
   const link = inviteLink(c), msg = `join ${c.name} on kumiqi ${link}`;
   let qr = '';
   try{ const g = window.qrcode(0, 'M'); g.addData(link); g.make(); qr = g.createSvgTag({cellSize:4, margin:2, scalable:true}); }catch(e){ qr = ''; }
-  openSheet(`<h2 id="sheet-title">Invite to ${esc(c.name)}</h2>
-    <div class="sheet-body-grid"><p class="lead">Send this link to someone you build with. It opens ${esc(c.name)} for them.</p>
+  openSheet(`<h2 id="sheet-title">Invite someone</h2>
+    <div class="sheet-body-grid"><div class="invite-to">${crewChip(c)}<span class="muted small">${esc(kindLabel(c.kind))}</span></div><p class="lead">Anyone with this link can join.</p>
     <div class="link-box"><input id="inv-link" readonly value="${esc(link)}" aria-label="Invite link"><button class="btn small" data-act="copy" data-v="${esc(link)}">Copy</button></div>
     ${navigator.share ? `<button class="btn btn-wide ghost" data-act="share" data-v="${esc(msg)}" data-url="${esc(link)}">Send with…</button>` : ''}
     ${qr ? `<div class="field"><span class="lbl">In person, they can scan this</span><div class="qr-box">${qr}</div></div>` : ''}</div>`);
@@ -1377,8 +1466,8 @@ function openSnap(){
   snapDraft = {file:null, src:'', place:null};
   onClose = () => { if(snapDraft && snapDraft.src) URL.revokeObjectURL(snapDraft.src); snapDraft = null; };
   openSheet(`<h2 id="sheet-title">Snap</h2><form class="sheet-body-grid" data-form="snap">
-    <div class="field"><div class="lbl-row"><label for="sn-text">What's going on?</label><span class="count" id="sn-count" aria-live="polite">0/${SNAP_MAX}</span></div><input id="sn-text" name="text" maxlength="${SNAP_MAX}" placeholder="3am and it finally works" autocomplete="off"></div>
-    <label class="dropzone photo-pick"><b id="sn-photo-l">Add a photo</b><span class="muted small">Your desk, your team, your coffee</span><input type="file" accept="image/*" id="sn-file"></label>
+    <div class="field"><div class="lbl-row"><label for="sn-text">What's going on?</label><span class="count" id="sn-count" aria-live="polite">0/${SNAP_MAX}</span></div><input id="sn-text" name="text" maxlength="${SNAP_MAX}" autocomplete="off"></div>
+    <label class="dropzone photo-pick"><b id="sn-photo-l">Add a photo</b><input type="file" accept="image/*" id="sn-file"></label>
     <div id="sn-prev" class="preview" hidden></div>
     <div class="place-row" id="sn-place" hidden>${['auto', 'tl', 'tr', 'bl', 'br'].map(v => `<button type="button" data-act="snap-place" data-v="${v}" aria-pressed="${v === 'auto'}">${{auto:'Auto', tl:'↖', tr:'↗', bl:'↙', br:'↘'}[v]}</button>`).join('')}</div>
     ${crewChecks()}
@@ -1425,9 +1514,9 @@ function openStamp(){
       <ul class="commit-list" id="st-commits"></ul></div>
     <div id="st-photo" class="sheet-body-grid" hidden>
       <label class="dropzone photo-pick"><b id="st-photo-l">Add a screenshot or photo</b><span class="muted small">Blur anything private first</span><input type="file" accept="image/*" id="st-file"></label></div>
-    <div class="field"><label for="st-title">Title</label><input id="st-title" maxlength="80" placeholder="What did you make?" autocomplete="off"></div>
-    <div class="field-row"><div class="field"><label for="st-stat">Number</label><input id="st-stat" maxlength="12" placeholder="+982" autocomplete="off"></div><div class="field"><label for="st-unit">Unit</label><input id="st-unit" maxlength="16" placeholder="lines" autocomplete="off"></div></div>
-    <div class="field"><label for="st-cap">Caption <span class="muted">(optional)</span></label><textarea id="st-cap" rows="2" maxlength="280" placeholder="Say it however you'd say it to your crew"></textarea></div>
+    <div class="field"><label for="st-title">Title</label><input id="st-title" maxlength="80" autocomplete="off"></div>
+    <div class="field-row"><div class="field"><label for="st-stat">Number</label><input id="st-stat" maxlength="12" autocomplete="off"></div><div class="field"><label for="st-unit">Unit</label><input id="st-unit" maxlength="16" autocomplete="off"></div></div>
+    <div class="field"><label for="st-cap">Caption <span class="muted">(optional)</span></label><textarea id="st-cap" rows="2" maxlength="280"></textarea></div>
     <div id="st-prev" class="preview wide"></div>
     ${crewChecks()}
     <button class="btn btn-wide" type="submit">Print and post</button></form>`, () => { stampPreview(); if(repo.includes('/') && !repo.endsWith('/')) loadCommits(); });
@@ -1541,7 +1630,7 @@ function openMe(){
     <div class="field"><label for="me-name">Name</label><input id="me-name" maxlength="60" value="${esc(profile.name || '')}" autocomplete="name"></div>
     <button class="btn" type="submit" style="justify-self:start">Save</button>
     <hr style="border:0;border-top:1px solid var(--line);width:100%;margin:4px 0">
-    ${c ? `<button type="button" class="btn ghost small" data-act="leave" style="justify-self:start">Leave ${esc(c.name)}</button>` : ''}
+    ${c ? `<div class="invite-to"><span class="muted small">Current crew</span>${crewChip(c)}</div><button type="button" class="btn ghost small" data-act="leave" style="justify-self:start">Leave this crew</button>` : ''}
     <button type="button" class="btn ghost small" data-act="signout" style="justify-self:start">Sign out</button></form>`);
 }
 async function saveMe(){
@@ -1555,9 +1644,9 @@ async function saveMe(){
 let confirmLeave = false;
 async function leaveCrew(btn){
   const c = curCrew(); if(!c) return;
-  if(!confirmLeave){ confirmLeave = true; btn.textContent = `Tap again to leave ${c.name}`; return; }
+  if(!confirmLeave){ confirmLeave = true; btn.textContent = 'Tap again to leave'; return; }
   confirmLeave = false;
-  try{ await q(sb.from('crew_members').delete().match({crew_id:c.id, user_id:me.id})); cur = null; closeSheet(); await loadCrews(); await loadCrew(); render(); toast(`You left ${c.name}.`); }
+  try{ await q(sb.from('crew_members').delete().match({crew_id:c.id, user_id:me.id})); cur = null; closeSheet(); await loadCrews(); await loadCrew(); render(); toast('You left the crew.'); }
   catch(e){ toast(errMsg(e)); }
 }
 
@@ -1572,8 +1661,11 @@ document.addEventListener('click', async e => {
     case 'signout': closeSheet(); await sb.auth.signOut(); profile = null; people = {}; crews = []; cur = null; break;
     case 'crew': cur = id; store.set('kq-crew', id); render(); try{ await loadCrew(); render(); }catch(err){ toast(errMsg(err)); } break;
     case 'new-crew': openNewCrew(); break;
-    case 'pick-color': { const f = el.closest('form'); $$('.sw', f).forEach(b => b.setAttribute('aria-pressed', String(b === el))); f.querySelector('[name=color]').value = v; break; }
-    case 'pick-kind': { const f = el.closest('form'); $$('[data-act=pick-kind]', f).forEach(b => b.setAttribute('aria-pressed', String(b === el))); f.querySelector('[name=kind]').value = v; break; }
+    case 'pick-color': { const f = el.closest('form'); $$('.sw', f).forEach(b => b.setAttribute('aria-pressed', String(b === el))); f.querySelector('[name=color]').value = v; crewPreview(); break; }
+    case 'pick-pattern': { const f = el.closest('form'); $$('[data-act=pick-pattern]', f).forEach(b => b.setAttribute('aria-pressed', String(b === el))); f.querySelector('[name=pattern]').value = v; crewPreview(); break; }
+    case 'remove-cover': if(crewDraft){ if(crewDraft.src) URL.revokeObjectURL(crewDraft.src); crewDraft.file = null; crewDraft.src = ''; crewDraft.remove = true; el.hidden = true; $('#cr-cover-l').textContent = 'Add a photo'; crewPreview(); } break;
+    case 'edit-crew': openEditCrew(); break;
+    case 'pick-kind': { const f = el.closest('form'); $$('[data-act=pick-kind]', f).forEach(b => b.setAttribute('aria-pressed', String(b === el))); f.querySelector('[name=kind]').value = v; crewPreview(); break; }
     case 'invite': openInvite(); break;
     case 'copy': try{ await navigator.clipboard.writeText(v); toast('Link copied.'); }catch(err){ const i = $('#inv-link'); if(i){ i.select(); } toast('Select the link and copy it.'); } break;
     case 'share': try{ await navigator.share({text:v}); }catch(err){} break;
@@ -1605,8 +1697,18 @@ document.addEventListener('submit', e => {
 document.addEventListener('input', e => {
   if(e.target.id === 'sn-text'){ const n = e.target.value.length, ct = $('#sn-count'); ct.textContent = `${n}/${SNAP_MAX}`; ct.classList.toggle('is-near', n >= SNAP_MAX - 10); snapPreview(); }
   if(['st-title', 'st-stat', 'st-unit'].includes(e.target.id)) stampPreview();
+  if(e.target.id === 'cr-name') crewPreview();
+  if(e.target.id === 'cr-hex'){ const f = e.target.closest('form'); $$('.sw', f).forEach(b => b.setAttribute('aria-pressed', String(b.classList.contains('sw-pick')))); f.querySelector('[name=color]').value = e.target.value; crewPreview(); }
 });
 document.addEventListener('change', async e => {
+  if(e.target.id === 'cr-cover' && e.target.files[0] && crewDraft){
+    if(crewDraft.src) URL.revokeObjectURL(crewDraft.src);
+    crewDraft.file = e.target.files[0]; crewDraft.src = URL.createObjectURL(crewDraft.file); crewDraft.remove = false;
+    $('#cr-cover-l').textContent = 'Change photo'; const rm = $('[data-act=remove-cover]'); if(rm) rm.hidden = false;
+    const hex = await photoColor(crewDraft.src), f = e.target.closest('form');
+    if(hex && f){ f.querySelector('[name=color]').value = hex; const hx = $('#cr-hex'); if(hx) hx.value = hex; $$('.sw', f).forEach(b => b.setAttribute('aria-pressed', String(b.classList.contains('sw-pick')))); }
+    crewPreview();
+  }
   if(e.target.id === 'sn-file' && e.target.files[0] && snapDraft){
     if(snapDraft.src) URL.revokeObjectURL(snapDraft.src);
     snapDraft.file = e.target.files[0]; snapDraft.src = URL.createObjectURL(snapDraft.file);
