@@ -1399,7 +1399,7 @@ function wallHTML(){
   if(!cur.some(p => p.author === me.id)){
     const fresh = freshTray().slice(0, 3);
     h += fresh.length
-      ? `<div class="wall-slot"><b>You shipped these lately</b><span>Tap one to make it your stamp.</span><ul class="commit-list">${fresh.map(c => `<li><button type="button" data-act="tray-pick" data-v="${esc(c.sha)}"><span class="cm-t">${esc(plainWords(c.message))}</span><span class="cm-m">${esc(repoName(c.repo))} · ${rel(c.at)}</span></button></li>`).join('')}</ul><div class="row"><button class="btn small ghost" data-act="stamp-photo">Use a screenshot</button><button class="btn small ghost" data-act="snap">Send a snap</button></div></div>`
+      ? `<div class="wall-slot"><b>You shipped these lately</b><span>Tap one to make it your stamp.</span><ul class="commit-list">${fresh.map(c => `<li><button type="button" data-act="tray-pick" data-v="${esc(c.sha)}"><span class="cm-t">${esc(sessionTitle(c))}</span><span class="cm-m">${esc(sessionMeta(c))}</span></button></li>`).join('')}</ul><div class="row"><button class="btn small ghost" data-act="stamp-photo">Use a screenshot</button><button class="btn small ghost" data-act="snap">Send a snap</button></div></div>`
       : `<div class="wall-slot"><b>Your stamp goes here</b><span>Share something you made lately, or a snap of what you're up to.</span><div class="row"><button class="btn small" data-act="stamp">Make a stamp</button><button class="btn small ghost" data-act="snap">Send a snap</button></div></div>`;
   }
   if(hero) h += `<div class="feature" style="margin-top:18px">${itemHTML(hero, 'Newest')}</div>`;
@@ -1509,7 +1509,7 @@ async function postSnap(form){
 }
 async function publish(row, to){
   const p = (await q(sb.from('posts').insert(row).select()))[0];
-  if(row.clip && row.clip.sha) myShas.add(row.clip.sha);
+  if(row.clip) [row.clip.sha].concat(row.clip.shas || []).forEach(x => x && myShas.add(x));
   await q(sb.from('post_crews').insert(to.map(crew_id => ({post_id:p.id, crew_id}))));
   closeSheet(); if(!to.includes(cur)) cur = to[0];
   await loadCrew(); render(); scrollTo({top:0, behavior:'smooth'});
@@ -1520,28 +1520,61 @@ async function publish(row, to){
 let stampDraft = null;
 /* ---- Tray: your recent GitHub work, found on its own ---- */
 let tray = null, myShas = new Set();
+/* Commit messages people don't really write ("Add files via upload", "Update app.html", "wip").
+   For those, the stamp describes the files that changed instead. */
+const GENERIC = /^(add(ed)?\s+files?\s+via\s+upload|(update|updated|create|created|delete|deleted|rename|renamed|add|added)\s+[\w.\-\/ ]+\.\w+|initial\s+commit|first\s+commit|init|wip|fix(es|ed)?|updates?|updated|changes?|commit|stuff|test|tweaks?|\.+|-+)$/i;
+const realMsg = c => (c.messages || []).map(m => String(m || '').split('\n')[0].trim()).find(m => m && !GENERIC.test(m)) || '';
+const baseName = f => String(f).split('/').pop();
+function filesTitle(files){
+  if(!files || !files.length) return '';
+  const verb = files.every(f => f.status === 'added') ? 'Added' : files.every(f => f.status === 'removed') ? 'Removed' : 'Updated';
+  const n = [...new Set(files.map(f => baseName(f.name)))];
+  const t = n.length === 1 ? n[0] : n.length === 2 ? `${n[0]} and ${n[1]}` : n.length === 3 ? `${n[0]}, ${n[1]} and ${n[2]}` : `${n[0]}, ${n[1]} and ${n.length - 2} more files`;
+  return `${verb} ${t}`.slice(0, 80);
+}
+const repoName = r => String(r || '').split('/')[1] || r;
+function sessionTitle(c){ const m = realMsg(c); return m ? plainWords(m) : c.diff ? filesTitle(c.diff.files) : `Worked on ${repoName(c.repo)}`; }
+function sessionMeta(c){ return `${repoName(c.repo)} · ${c.n > 1 ? c.n + ' commits · ' : ''}${rel(c.at)}`; }
+/* What changed, across every commit in the session: one call to GitHub. */
+async function ensureDiff(c){
+  if(c.diff) return c.diff;
+  let d;
+  if(c.n === 1) d = await gh(`/repos/${c.repo}/commits/${c.sha}`);
+  else { const oldest = c.shas[c.shas.length - 1]; try{ d = await gh(`/repos/${c.repo}/compare/${oldest}^...${c.sha}`); }catch(e){ d = await gh(`/repos/${c.repo}/compare/${oldest}...${c.sha}`); } }
+  const files = (d.files || []).map(f => ({name:f.filename, status:f.status, add:f.additions || 0, del:f.deletions || 0}));
+  c.diff = {files, add:files.reduce((x, f) => x + f.add, 0), del:files.reduce((x, f) => x + f.del, 0)};
+  return c.diff;
+}
+/* A "session" is your commits to one project on one day, newest first. */
+function toSessions(commits){
+  const groups = new Map();
+  commits.forEach(c => { const day = new Date(c.at).toDateString(), k = c.repo + '|' + day;
+    if(!groups.has(k)) groups.set(k, {repo:c.repo, sha:c.sha, shas:[], messages:[], at:c.at, n:0});
+    const g = groups.get(k); g.shas.push(c.sha); g.messages.push(c.message); g.n++; });
+  return [...groups.values()].sort((x, y) => new Date(y.at) - new Date(x.at));
+}
 async function loadTray(force){
   const login = profile && profile.github_login;
   if(!login){ tray = []; return; }
   try{
-    const c = JSON.parse(store.get('kq-tray') || 'null');
-    if(!force && c && c.login === login && Date.now() - c.t < 10 * 60e3){ tray = c.items; return; }
+    const c = JSON.parse(store.get('kq-tray2') || 'null');
+    if(!force && c && c.login === login && Date.now() - c.t < 20 * 60e3){ tray = c.items; return; }
   }catch(e){}
   try{
     const repos = (await gh(`/users/${login}/repos?sort=pushed&per_page=6&type=owner`)).filter(r => !r.fork).slice(0, 3);
-    const lists = await Promise.all(repos.map(r => gh(`/repos/${r.full_name}/commits?author=${encodeURIComponent(login)}&per_page=6`)
+    const lists = await Promise.all(repos.map(r => gh(`/repos/${r.full_name}/commits?author=${encodeURIComponent(login)}&per_page=10`)
       .then(cs => cs.map(c => ({repo:r.full_name, sha:c.sha, message:c.commit.message, at:c.commit.author && c.commit.author.date}))).catch(() => [])));
-    tray = lists.flat().sort((x, y) => new Date(y.at) - new Date(x.at)).slice(0, 12);
-    store.set('kq-tray', JSON.stringify({login, t:Date.now(), items:tray}));
+    tray = toSessions(lists.flat()).slice(0, 10);
+    await Promise.all(tray.filter(x => !realMsg(x)).slice(0, 4).map(x => ensureDiff(x).catch(() => null)));
+    store.set('kq-tray2', JSON.stringify({login, t:Date.now(), items:tray}));
   }catch(e){ tray = tray || []; }
 }
 async function loadMyShas(){
-  try{ myShas = new Set((await q(sb.from('posts').select('clip').eq('author', me.id))).map(p => p.clip && p.clip.sha).filter(Boolean)); }catch(e){}
+  try{ myShas = new Set((await q(sb.from('posts').select('clip').eq('author', me.id))).flatMap(p => p.clip ? [p.clip.sha].concat(p.clip.shas || []) : []).filter(Boolean)); }catch(e){}
 }
-const freshTray = () => (tray || []).filter(c => !myShas.has(c.sha));
-const repoName = r => String(r || '').split('/')[1] || r;
+const freshTray = () => (tray || []).filter(c => !c.shas.some(x => myShas.has(x)));
 function commitListHTML(list){
-  return list.map(c => `<li><button type="button" data-act="pick-commit" data-v="${esc(c.sha)}" aria-pressed="false"><span class="cm-t">${esc(plainWords(c.message))}</span><span class="cm-m">${esc(repoName(c.repo))} · ${rel(c.at)}</span></button></li>`).join('');
+  return list.map(c => `<li><button type="button" data-act="pick-commit" data-v="${esc(c.sha)}" aria-pressed="false"><span class="cm-t">${esc(sessionTitle(c))}</span><span class="cm-m">${esc(sessionMeta(c))}</span></button></li>`).join('');
 }
 function openStamp(prefSha){
   const fresh = freshTray();
@@ -1591,7 +1624,7 @@ async function loadCommits(){
   try{
     const rows = await gh(`/repos/${repo}/commits?per_page=8`);
     store.set('kq-repo', repo);
-    stampDraft.commits = rows.map(c => ({repo, sha:c.sha, message:c.commit.message, at:c.commit.author && c.commit.author.date}));
+    stampDraft.commits = rows.map(c => ({repo, sha:c.sha, shas:[c.sha], messages:[c.commit.message], at:c.commit.author && c.commit.author.date, n:1}));
     list.innerHTML = commitListHTML(stampDraft.commits) || '<li class="muted small">No commits yet.</li>';
   }catch(e){ list.innerHTML = `<li><p class="form-err">${esc(errMsg(e))}</p></li>`; }
 }
@@ -1601,12 +1634,14 @@ async function pickCommit(sha){
   if(!stampDraft.commits.includes(c)) stampDraft.commits.push(c);
   $$('#st-commits button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === sha)));
   try{
-    const d = c.full || (c.full = await gh(`/repos/${c.repo}/commits/${c.sha}`));
-    const st = commitStat({add:d.stats && d.stats.additions, del:d.stats && d.stats.deletions, files:(d.files || []).length, message:c.message});
-    const add = (d.stats && d.stats.additions) || 0, del = (d.stats && d.stats.deletions) || 0, files = (d.files || []).length;
-    stampDraft.pick = {sha:c.sha, mark:st.mark, clip:{type:'terminal', repo:c.repo, sha:c.sha, lines:[`$ git show --stat ${c.sha.slice(0, 7)}`, c.message.split('\n')[0].slice(0, 60), ` ${files} ${files === 1 ? 'file' : 'files'} changed`, ` ${add.toLocaleString()} insertions(+), ${del.toLocaleString()} deletions(-)`]}};
-    $('#st-title').value = plainWords(c.message); $('#st-stat').value = st.stat; $('#st-unit').value = st.unit;
+    const d = await ensureDiff(c), files = d.files.length;
+    const st = commitStat({add:d.add, del:d.del, files, message:realMsg(c)});
+    const top = d.files.slice().sort((x, y) => (y.add + y.del) - (x.add + x.del)).slice(0, 3);
+    const short = n => n.length > 18 ? n.slice(0, 17) + '…' : n;
+    stampDraft.pick = {sha:c.sha, mark:st.mark, clip:{type:'terminal', repo:c.repo, sha:c.sha, shas:c.shas, lines:['$ git diff --stat', ...top.map(f => ` ${short(baseName(f.name))}  +${f.add.toLocaleString()} −${f.del.toLocaleString()}`), ` ${files} ${files === 1 ? 'file' : 'files'} changed`]}};
+    $('#st-title').value = sessionTitle(c); $('#st-stat').value = st.stat; $('#st-unit').value = st.unit;
     stampPreview();
+    $$('#st-commits button').forEach(b => { if(b.dataset.v === sha) b.querySelector('.cm-t').textContent = sessionTitle(c); });
   }catch(e){ toast(errMsg(e)); }
 }
 async function postStamp(form){
