@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}</style></head><body><title>Kumiqi</title>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0}</style><link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png"><link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"><link rel="apple-touch-icon" href="apple-touch-icon.png"><meta name="apple-mobile-web-app-title" content="Kumiqi"></head><body><title>Kumiqi</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -83,7 +83,8 @@ h1,h2,h3{margin:0;font-weight:400;text-wrap:balance}
 .btn.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1.5px var(--line)}
 .btn.accent{background:var(--accent);color:var(--on-accent)}
 .btn-wide{width:100%;padding:13px 16px;font-size:15px}
-.link-btn{border:0;background:none;padding:0;color:var(--accent);font:500 13px var(--font-body);cursor:pointer;text-decoration:underline;text-underline-offset:3px;justify-self:start}
+.link-btn{display:inline-flex;align-items:center;gap:6px;border:0;background:transparent;padding:8px 12px;border-radius:7px;box-shadow:inset 0 0 0 1.5px var(--line);color:var(--ink);font:500 13.5px/1.15 var(--font-body);cursor:pointer;text-decoration:none;justify-self:start}
+.link-btn:hover{box-shadow:inset 0 0 0 1.5px var(--ink-3)}
 input,textarea{width:100%;border:1.5px solid var(--line);background:var(--raised);color:var(--ink);border-radius:7px;padding:10px 12px;font:16px/1.4 var(--font-body)}
 textarea{resize:vertical}
 input:focus,textarea:focus{outline:none;border-color:var(--ink-2)}
@@ -263,7 +264,8 @@ input:focus,textarea:focus{outline:none;border-color:var(--ink-2)}
 .pin{border:1.5px solid var(--paper-ink);background:transparent;color:var(--paper-ink);border-radius:999px;padding:4px 10px;font:500 12.5px/1.2 var(--font-body);cursor:pointer}
 .pin[aria-pressed="true"]{background:var(--paper-ink);color:var(--paper)}
 .pinned-tag{font:10.5px var(--font-body);letter-spacing:.05em;text-transform:uppercase;color:var(--paper-ink-2)}
-.open-from-letter{border:0;background:none;padding:0;color:var(--paper-ink);font:500 12.5px var(--font-body);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.open-from-letter{border:0;background:none;padding:0;color:var(--paper-ink);font:600 12.5px var(--font-body);text-decoration:none;cursor:pointer}
+.open-from-letter::after{content:' →'}
 .write{display:grid;gap:8px}
 .ask-check{justify-self:start;padding:6px 10px;font-size:13.5px}
 .req-tag{display:inline-block;margin-left:8px;padding:2px 6px;border-radius:3px;background:#E2B13C;color:#2A1F06;font:500 10.5px/1.3 var(--font-body);letter-spacing:.04em;text-transform:uppercase;vertical-align:1px}
@@ -317,6 +319,18 @@ input:focus,textarea:focus{outline:none;border-color:var(--ink-2)}
 .cell .pc-text{font-size:11.5px;line-height:18px}
 .cell .tape{width:36px;height:12px;top:-6px}
 .cell-empty{font:10.5px/1.4 var(--font-body);color:var(--paper-ink-2);text-transform:uppercase;letter-spacing:.06em;text-align:center}
+.cell > .hit,.cell > .cell-open{width:84%}
+.stamp-xs{--r:3px;filter:drop-shadow(0 0 .7px rgba(0,0,0,.4))}
+.xs-band{display:grid;gap:3px;padding-top:5px;min-width:0}
+.xs-band span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font:600 10.5px/1.2 var(--font-mincho);color:var(--paper-ink)}
+.xs-band b{flex:none;font:800 11px/1 var(--font-stamp);color:var(--c);font-variant-numeric:tabular-nums}
+.stamp-xs.is-cut .xs-band b,.stamp-xs.is-scrap .xs-band b{color:#D8432F}
+.sp-snap{aspect-ratio:4/5;background:#FBFAF6;padding:4px 4px 12px;box-shadow:0 0 0 1px rgba(0,0,0,.12);border-radius:1px}
+.sp-snap img{width:100%;height:100%;object-fit:cover;display:block}
+.sp-snap.is-note{padding:10px 9px}
+.sp-snap.is-note p{margin:0;font:500 10.5px/1.4 var(--font-body);color:var(--paper-ink);display:-webkit-box;-webkit-line-clamp:7;-webkit-box-orient:vertical;overflow:hidden}
+.cell-open{aspect-ratio:4/5;border:1.5px dashed var(--sheet-line);border-radius:2px;background:transparent;color:var(--paper-ink-2);font:300 26px/1 var(--font-body);cursor:pointer}
+.cell-open:hover{color:var(--paper-ink);border-color:var(--paper-ink-2)}
 .roll-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .crew-sheets{display:grid;gap:18px;margin-top:26px}
 .mini{display:grid;gap:8px}
@@ -723,7 +737,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--ink-2)}
 .rec-grid{margin-top:4px}
 .weeks-line{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;width:100%;margin-top:12px;padding:14px;border:0;border-radius:12px;background:var(--raised);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);font:14px/1.3 var(--font-body);cursor:pointer;text-align:left}
 .weeks-line b{font:var(--dw) 20px/1 var(--font-display);margin-right:4px}
-.wl-go{margin-left:auto;color:var(--accent);font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.wl-go{margin-left:auto;align-self:center;padding:7px 12px;border-radius:99px;background:var(--ink);color:var(--desk);font:500 13px/1 var(--font-body)}
 .field > label:not(.dropzone),.field > legend,.lbl,.private-label,.about .about-k,.crew-kind,.saved-ev span,.cell-empty{text-transform:none;letter-spacing:0;font-size:13px;font-weight:500}
 .private-label{font-weight:600}
 .me-links{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-top:14px}
@@ -772,7 +786,7 @@ body.onb-open{overflow:hidden}
 /* The first open lives in the wall */
 .starter{display:grid;gap:10px;margin-bottom:22px}
 .ss-host{display:flex;align-items:center;gap:8px;margin:0;font-size:14px;color:var(--ink-2)}
-.starter-slot{display:grid;gap:12px;justify-items:start;padding:22px 18px;border-radius:4px;border:2px dashed var(--ink-3);background:color-mix(in srgb,var(--paper) 55%,transparent);min-height:220px;align-content:center}
+.starter-slot{display:grid;gap:12px;justify-items:start;padding:22px 18px;border-radius:4px;border:2px dashed var(--ink-3);background:var(--raised);color:var(--ink);min-height:220px;align-content:center}
 .starter-slot.is-pick{align-content:start}
 .ss-t{margin:0;font:var(--dw) 24px/1.15 var(--font-display)}
 .ss-s{margin:0;font-size:15.5px;color:var(--ink-2);line-height:1.45}
@@ -801,7 +815,13 @@ body.onb-open{overflow:hidden}
 .pc-cancel .pc-slogan{width:100%}
 .pos-tr .pc-mini{right:auto;left:5cqi}
 .pc-slogan p{font-size:6.2cqi!important;line-height:1.15!important}
-.pc-slogan p span{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.pc-slogan p span{display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden}
+.pc-slogan.sl-l p{font-size:7.2cqi!important}
+.pc-slogan.sl-s p{font-size:5cqi!important}
+.pc-cancel.is-long{width:56cqi}
+.lbl-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.count{font:500 12.5px var(--font-body);color:var(--ink-3);font-variant-numeric:tabular-nums}
+.count.is-near{color:var(--ink)}
 .corner{display:block;width:16px;height:16px;border:1.5px solid currentColor;border-radius:3px;position:relative}
 .corner::after{content:'';position:absolute;width:6px;height:6px;background:currentColor;border-radius:1px}
 .c-tl::after{top:1.5px;left:1.5px}.c-tr::after{top:1.5px;right:1.5px}.c-bl::after{bottom:1.5px;left:1.5px}.c-br::after{bottom:1.5px;right:1.5px}
@@ -1211,11 +1231,13 @@ const WAVE = `<svg class="pc-wave" viewBox="0 0 200 12" preserveAspectRatio="non
 function miniStampHTML(p){ const pp = PEOPLE[p.author] || {initial:(who(p.author) || '?').charAt(0).toUpperCase(), hue:['mustard','sea','moss','vermilion','magenta'][hash(String(p.author)) % 5]}; return `<span class="pc-mini" aria-hidden="true"><i style="--h:var(--${pp.hue});--hi:var(--on-${pp.hue})">${esc(pp.initial)}</i></span>`; }
 const PAPER_DECO = {avion:`<span class="pb-label">PAR AVION</span>`, washi:`<svg class="pb-leaves" viewBox="0 0 200 250" preserveAspectRatio="none" aria-hidden="true"><path transform="translate(16 20) rotate(-20) scale(1)" fill="#C8452F" d="M0-12l2.5 5 4.5-2-1 5.5 6 1-4.5 3.5 2 3-5-.8L2 8h-4l-2.5-4.8-5 .8 2-3L-14 1.5l6-1-1-5.5 4.5 2z"/><path transform="translate(120 14) rotate(-40) scale(0.6)" fill="#C8452F" d="M0-12l2.5 5 4.5-2-1 5.5 6 1-4.5 3.5 2 3-5-.8L2 8h-4l-2.5-4.8-5 .8 2-3L-14 1.5l6-1-1-5.5 4.5 2z"/><path transform="translate(184 226) rotate(10) scale(1.1)" fill="#B8352A" d="M0-12l2.5 5 4.5-2-1 5.5 6 1-4.5 3.5 2 3-5-.8L2 8h-4l-2.5-4.8-5 .8 2-3L-14 1.5l6-1-1-5.5 4.5 2z"/><path transform="translate(22 236) rotate(40) scale(0.7)" fill="#E0A33A" d="M0-12l2.5 5 4.5-2-1 5.5 6 1-4.5 3.5 2 3-5-.8L2 8h-4l-2.5-4.8-5 .8 2-3L-14 1.5l6-1-1-5.5 4.5 2z"/><path transform="translate(150 196) rotate(25) scale(0.55)" fill="#D9822B" d="M0-12l2.5 5 4.5-2-1 5.5 6 1-4.5 3.5 2 3-5-.8L2 8h-4l-2.5-4.8-5 .8 2-3L-14 1.5l6-1-1-5.5 4.5 2z"/></svg><span class="pb-vert" aria-hidden="true"><span>秋の夜</span></span>`, picado:`<svg class="pb-banner" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true"><path d="M0 2h200" stroke="#8A7A62" stroke-width="1"/><g transform="translate(0 0)"><path d="M2 2h36v30l-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5z" fill="#E4387A"/><g fill="#FBF6EC"><circle cx="20" cy="15" r="2.4"/><circle cx="20" cy="9.6" r="2.6"/><circle cx="20" cy="20.4" r="2.6"/><circle cx="14.6" cy="15" r="2.6"/><circle cx="25.4" cy="15" r="2.6"/><path d="M6 27l2-3 2 3zM12 27l2-3 2 3zM24 27l2-3 2 3zM30 27l2-3 2 3z"/></g></g><g transform="translate(40 0)"><path d="M2 2h36v30l-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5z" fill="#F2A93B"/><g fill="#FBF6EC"><circle cx="20" cy="15" r="2.4"/><circle cx="20" cy="9.6" r="2.6"/><circle cx="20" cy="20.4" r="2.6"/><circle cx="14.6" cy="15" r="2.6"/><circle cx="25.4" cy="15" r="2.6"/><path d="M6 27l2-3 2 3zM12 27l2-3 2 3zM24 27l2-3 2 3zM30 27l2-3 2 3z"/></g></g><g transform="translate(80 0)"><path d="M2 2h36v30l-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5z" fill="#2BA39B"/><g fill="#FBF6EC"><circle cx="20" cy="15" r="2.4"/><circle cx="20" cy="9.6" r="2.6"/><circle cx="20" cy="20.4" r="2.6"/><circle cx="14.6" cy="15" r="2.6"/><circle cx="25.4" cy="15" r="2.6"/><path d="M6 27l2-3 2 3zM12 27l2-3 2 3zM24 27l2-3 2 3zM30 27l2-3 2 3z"/></g></g><g transform="translate(120 0)"><path d="M2 2h36v30l-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5z" fill="#7B4FC4"/><g fill="#FBF6EC"><circle cx="20" cy="15" r="2.4"/><circle cx="20" cy="9.6" r="2.6"/><circle cx="20" cy="20.4" r="2.6"/><circle cx="14.6" cy="15" r="2.6"/><circle cx="25.4" cy="15" r="2.6"/><path d="M6 27l2-3 2 3zM12 27l2-3 2 3zM24 27l2-3 2 3zM30 27l2-3 2 3z"/></g></g><g transform="translate(160 0)"><path d="M2 2h36v30l-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5-3 5-3-5z" fill="#E4573A"/><g fill="#FBF6EC"><circle cx="20" cy="15" r="2.4"/><circle cx="20" cy="9.6" r="2.6"/><circle cx="20" cy="20.4" r="2.6"/><circle cx="14.6" cy="15" r="2.6"/><circle cx="25.4" cy="15" r="2.6"/><path d="M6 27l2-3 2 3zM12 27l2-3 2 3zM24 27l2-3 2 3zM30 27l2-3 2 3z"/></g></g></svg>`, nightshift:`<svg class="pb-moon" viewBox="0 0 40 40" aria-hidden="true"><path d="M26 6a15 15 0 1 0 8 25A13 13 0 0 1 26 6z" fill="#E9BC4E"/></svg><span class="pb-label">NIGHT SHIFT</span>`};
 function paperKey(id){ return PAPERS.some(x => x.id === id) ? id : 'notebook'; }
+const slen = t => String(t || '').length;
+function sloganSize(t){ const n = slen(t); return n <= 22 ? 'sl-l' : n > 40 ? 'sl-s' : ''; }
 function postcardHTML(p){
   if(p.image){
     const pl = p.place || {pos:'top', ink:'light'};
     const pos = {top:'tl', bottom:'bl'}[pl.pos] || pl.pos;
-    return `<div class="pcard pos-${pos} ink-${pl.ink}"><img src="${p.image}" alt="">${miniStampHTML(p)}<div class="pc-cancel">${ringSVG(p)}<div class="pc-slogan">${WAVE}<p><span>${esc(p.text)}</span></p>${WAVE}</div></div></div>`;
+    return `<div class="pcard pos-${pos} ink-${pl.ink}"><img src="${p.image}" alt="">${miniStampHTML(p)}<div class="pc-cancel${slen(p.text) > 40 ? ' is-long' : ''}">${ringSVG(p)}<div class="pc-slogan ${sloganSize(p.text)}">${WAVE}<p><span>${esc(p.text)}</span></p>${WAVE}</div></div></div>`;
   }
   const c = CREWS.find(x => (p.crews || []).includes(x.id));
   const pk = paperKey(p.paper);
@@ -1252,6 +1274,11 @@ function snapPreview(){
   const crews = $$('input[name="sn-crew"]:checked').map(i => i.value);
   el.hidden = !snapDraft.image; $('#sn-place').hidden = !snapDraft.image; const pf = $('#sn-paper-f'); if(pf) pf.hidden = !!snapDraft.image;
   if(snapDraft.image) el.innerHTML = postcardHTML({author:'me', crews, image:snapDraft.image, text:($('#sn-text').value || '').trim() || 'Your line goes here', at:now(), place:snapDraft.place});
+}
+/* The week sheet shows small, flat pieces: a stamp is its art, title and number; a snap is just its photo or note. */
+function sheetPieceHTML(p){
+  if(p.kind === 'ship') return `<div class="stamp stamp-xs${p.mark ? ' is-' + p.mark : ''}" style="--c:${inkOf(p)};--ar:4/5"><div class="stamp-art">${stampArt(p)}</div><div class="xs-band"><span>${esc(p.title)}</span>${p.stat ? `<b>${esc(p.stat)}</b>` : ''}</div></div>`;
+  return p.image ? `<div class="sp-snap"><img src="${p.image}" alt=""></div>` : `<div class="sp-snap is-note"><p>${esc(p.text)}</p></div>`;
 }
 function pieceHTML(p, size){ return p.kind === 'ship' ? stampHTML(p, {size}) : postcardHTML(p); }
 
@@ -1410,7 +1437,7 @@ function viewRoll(){
   const mine = myWeek();
   const cells = Array.from({length:6}, (_, i) => {
     const p = mine[i];
-    return `<div class="cell">${p ? `<div class="hit" role="button" tabindex="0" data-act="open" data-id="${p.id}" aria-label="${esc(p.kind === 'ship' ? p.title : p.text)}">${pieceHTML(p, 'sm')}</div>` : `<span class="cell-empty">Empty<br>slot</span>`}</div>`;
+    return `<div class="cell">${p ? `<div class="hit" role="button" tabindex="0" data-act="open" data-id="${p.id}" aria-label="${esc(p.kind === 'ship' ? p.title : p.text)}">${sheetPieceHTML(p)}</div>` : `<button class="cell-open" data-act="tab" data-tab="tray" aria-label="Fill this slot from your tray">+</button>`}</div>`;
   }).join('');
   const crew = CREWS.find(c => c.id === S.crew) || CREWS[0];
   const others = crew.members.filter(id => id !== 'me').map(id => {
@@ -1424,7 +1451,7 @@ function viewRoll(){
   <div class="stampsheet" aria-label="Your sheet for this week"><div class="selvage"><span>Kumiqi · this week</span><span>${mine.length} of 6</span></div><div class="cells">${cells}</div></div>
   <div class="roll-actions">${ships ? `<button class="btn" data-act="week-card">Make a card of my week</button>` : ''}<button class="btn ghost" data-act="tab" data-tab="tray">Print from tray</button></div>
   ${mailCardHTML(crew)}
-  <button class="weeks-line" data-act="weeks"><span><b>${r2.total}</b> weeks shipped</span><span><b>${r2.run}</b>-week run</span><span class="wl-go">Your weeks</span></button>`;
+  <button class="weeks-line" data-act="weeks"><span><b>${r2.total}</b> weeks shipped</span><span><b>${r2.run}</b>-week run</span><span class="wl-go">Your weeks →</span></button>`;
 }
 
 function savedEventsHTML(){
@@ -1732,7 +1759,7 @@ function openSnap(){
   if(S.crew === 'night' && openCrews().some(c => c.id === 'night')) snapTo.push('night');
   openSheet(`<h2 id="sheet-title">Snap</h2>
     <div class="print" style="margin-top:14px">
-      <div class="field"><label for="sn-text">What's going on?</label><input id="sn-text" maxlength="90" placeholder="3am and it finally works"></div>
+      <div class="field"><div class="lbl-row"><label for="sn-text">What's going on?</label><span class="count" id="sn-count" aria-live="polite">0/60</span></div><input id="sn-text" maxlength="60" placeholder="3am and it finally works"></div>
       <div class="field"><label class="dropzone" for="sn-photo" data-drop="snap"><b>Add a photo</b><input id="sn-photo" type="file" accept="image/*" hidden></label><div id="sn-card" class="sn-card" hidden></div>
         <div class="seg" id="sn-place" role="group" aria-label="Where the postmark goes" hidden><button type="button" data-act="snap-place" data-v="auto" aria-pressed="true">Auto</button>${[['tl','Top left'],['tr','Top right'],['bl','Bottom left'],['br','Bottom right']].map(([v, l]) => `<button type="button" data-act="snap-place" data-v="${v}" aria-pressed="false" aria-label="${l}"><span class="corner c-${v}" aria-hidden="true"></span></button>`).join('')}</div></div>
       <fieldset class="field" id="sn-paper-f"><legend>Paper</legend><div class="paper-pick" id="sn-paper">${PAPERS.map(pp => { const ok = paperOwned(pp.id);
@@ -3441,6 +3468,7 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('input', e => {
   if(e.target.id === 'iv-text'){ inviteEdited = true; return; }
+  if(e.target.id === 'sn-text'){ const n = e.target.value.length, ct = $('#sn-count'); if(ct){ ct.textContent = `${n}/60`; ct.classList.toggle('is-near', n >= 50); } }
   if(e.target.id === 'sn-text' || e.target.name === 'sn-crew'){ snapPreview(); return; }
   if(e.target.id === 'fs-crew'){ if(firstState) firstState.crew = e.target.value; const pv = $('.fs-preview'); if(pv) pv.textContent = `hi, join ${e.target.value.trim() || 'My crew'} on kumiqi kumiqi.app/c/…`; return; }
   if(e.target.id === 'iv-name'){ if(!inviteEdited){ const wrap = e.target.closest('[data-crew]'), c = CREWS.find(x => x.id === wrap.dataset.crew); $('#iv-text').value = inviteText(e.target.value.trim().split(/\s+/)[0], c); } return; }
@@ -3506,7 +3534,7 @@ Object.assign(PEOPLE, S.people || {});
 /* Laptop view for the public website: the app runs inside a phone, with a short guide beside it.
    Phones and the Claude preview get the app directly. Add ?frame to any address to preview it. */
 const SHELL = window.top === window && !/[?&]embed\b/.test(location.search)
-  && (location.hostname.endsWith('github.io') || /[?&]frame\b/.test(location.search)) && matchMedia('(min-width: 900px)').matches;
+  && ((location.hostname.endsWith('github.io')||location.hostname.endsWith('kumiqi.app')) || /[?&]frame\b/.test(location.search)) && matchMedia('(min-width: 900px)').matches;
 function buildShell(){
   document.documentElement.classList.add('shell');
   const el = document.createElement('div'); el.className = 'shell-wrap';
