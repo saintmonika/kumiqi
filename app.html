@@ -1123,6 +1123,7 @@ let uid = 0;
 
 /* ====== State ====== */
 let sb = null, me = null, profile = null, ghToken = null;
+let figTray = [], figFolder = null, figLinked = false;
 let crews = [], cur = null, people = {}, members = [], posts = [], reacts = [], urls = {};
 let live = null, reloadTimer = null, booted = false, view = store.get('kq-view') === 'week' ? 'week' : 'crew', myTimes = [], memberSince = {};
 
@@ -1347,7 +1348,9 @@ async function renderSignedOut(){
     <p class="gate-foot">Free for builders. Only your crews see what you post.</p></section>`;
 }
 async function start(session){
-  me = session.user; ghToken = session.provider_token || ghToken;
+  me = session.user;
+  const linkingFigma = store.get('kq-figma-link') && session.provider_token;
+  if(!linkingFigma) ghToken = session.provider_token || ghToken;
   if(/[#&]access_token=|[?&]code=/.test(location.href) || location.search.includes('c=')) history.replaceState(null, '', APP_URL);
   $('#view').innerHTML = `<div class="loading">${MASCOT}</div>`;
   try{
@@ -1362,7 +1365,8 @@ async function start(session){
     if(!cur) cur = store.get('kq-crew');
     await loadCrews(); await loadCrew();
     render(); goLive();
-    Promise.all([loadTray(), loadMyShas(), loadLetters()]).then(() => { if($('#scrim').hidden) renderQuiet(); });
+    if(linkingFigma){ store.del('kq-figma-link'); finishFigma(session); }
+    Promise.all([loadTray(), loadMyShas(), loadLetters(), loadFigma()]).then(() => { if($('#scrim').hidden) renderQuiet(); });
   }catch(e){ $('#view').innerHTML = `<div class="setup"><p>${esc(errMsg(e))}</p><button class="btn" data-act="retry">Try again</button></div>`; }
 }
 
@@ -1608,9 +1612,11 @@ function wallHTML(){
   const rest = ships.filter(p => p !== hero);
   let h = '';
   if(!cur.some(p => p.author === me.id)){
-    const fresh = freshTray().slice(0, 3);
+    const fresh = freshTray().map(c => ({at:c.at, html:`<li><button type="button" data-act="tray-pick" data-v="${esc(c.sha)}"><span class="cm-t">${esc(sessionTitle(c))}</span><span class="cm-m">${esc(sessionMeta(c))}</span></button></li>`}))
+      .concat(figTray.map(x => ({at:x.at, html:`<li><button type="button" data-act="tray-fig" data-v="${esc(x.id)}"><span class="cm-t">${esc(figTitle(x))}</span><span class="cm-m">Figma · ${esc(x.file_name || '')} · ${rel(x.at)}</span></button></li>`})))
+      .sort((x, y) => new Date(y.at) - new Date(x.at)).slice(0, 3);
     h += fresh.length
-      ? `<div class="wall-slot"><b>You shipped these lately</b><span>Tap one to make it your stamp.</span><ul class="commit-list">${fresh.map(c => `<li><button type="button" data-act="tray-pick" data-v="${esc(c.sha)}"><span class="cm-t">${esc(sessionTitle(c))}</span><span class="cm-m">${esc(sessionMeta(c))}</span></button></li>`).join('')}</ul><div class="row"><button class="btn small ghost" data-act="stamp-photo">Use a screenshot</button><button class="btn small ghost" data-act="snap">Send a snap</button></div></div>`
+      ? `<div class="wall-slot"><b>You shipped these lately</b><span>Tap one to make it your stamp.</span><ul class="commit-list">${fresh.map(x => x.html).join('')}</ul><div class="row"><button class="btn small ghost" data-act="stamp-photo">Use a screenshot</button><button class="btn small ghost" data-act="snap">Send a snap</button></div></div>`
       : `<div class="wall-slot"><b>Your stamp goes here</b><span>Share something you made lately, or a snap of what you're up to.</span><div class="row"><button class="btn small" data-act="stamp">Make a stamp</button><button class="btn small ghost" data-act="snap">Send a snap</button></div></div>`;
   }
   if(hero) h += `<div class="feature" style="margin-top:18px">${itemHTML(hero, 'Newest')}</div>`;
@@ -1729,6 +1735,59 @@ async function publish(row, to, answers){
   toast(answers && answers.length ? 'Printed. They\'ll see you shipped what they asked for.' : row.kind === 'ship' ? 'Printed. Your crew can see it.' : 'Sent to your crew.');
 }
 
+/* ====== Figma: one folder link, then new versions show up in your Tray on their own ====== */
+const FIGMA_SCOPES = 'current_user:read file_metadata:read file_versions:read folder_metadata:read webhooks:read webhooks:write';
+async function figmaFn(route, body){
+  const {data} = await sb.auth.getSession(); const token = data && data.session && data.session.access_token;
+  const r = await fetch(`${SUPABASE_URL}/functions/v1/figma/${route}`, {method:'POST', headers:{'Content-Type':'application/json', Authorization:'Bearer ' + token, apikey:SUPABASE_KEY}, body:JSON.stringify(body || {})});
+  const j = await r.json().catch(() => ({}));
+  if(!r.ok) throw new Error(j.error || 'Figma connection didn\'t answer. Try again.');
+  return j;
+}
+async function loadFigma(){
+  try{
+    const u = (await sb.auth.getUser()).data.user; figLinked = !!(u && (u.identities || []).some(i => i.provider === 'figma'));
+    figFolder = figLinked ? ((await q(sb.from('figma_folders').select('folder_id, folder_name').eq('user_id', me.id)))[0] || null) : null;
+    figTray = figLinked ? await q(sb.from('figma_tray').select('*').eq('user_id', me.id).order('at', {ascending:false}).limit(10)) : [];
+    await signUrls(figTray.map(x => x.thumb_path).filter(Boolean));
+  }catch(e){ figTray = figTray || []; }
+}
+async function linkFigma(btn){
+  btn.disabled = true; store.set('kq-figma-link', '1');
+  try{ await q(sb.auth.linkIdentity({provider:'figma', options:{redirectTo:APP_URL, scopes:FIGMA_SCOPES}})); }
+  catch(e){ store.del('kq-figma-link'); btn.disabled = false; toast(/manual linking/i.test(errMsg(e)) ? 'Figma linking is off in Supabase. Turn on "Allow manual linking".' : errMsg(e)); }
+}
+async function finishFigma(session){
+  try{ await figmaFn('connect', {provider_token:session.provider_token, provider_refresh_token:session.provider_refresh_token || null}); figLinked = true; toast('Figma connected. Now pick a folder to watch in You.'); }
+  catch(e){ toast(errMsg(e)); }
+}
+async function watchFolder(btn){
+  const link = ($('#fg-link').value || '').trim(); if(!link){ toast('Paste a Figma folder link.'); $('#fg-link').focus(); return; }
+  btn.disabled = true; btn.textContent = 'Connecting…';
+  try{ const j = await figmaFn('watch', {link}); figFolder = {folder_name:j.folder_name}; toast('Watching ' + (j.folder_name || 'that folder') + '. New versions land in your Tray.'); openMe(); }
+  catch(e){ toast(errMsg(e)); btn.disabled = false; btn.textContent = 'Watch'; }
+}
+async function unwatchFolder(btn){
+  btn.disabled = true;
+  try{ await figmaFn('unwatch'); figFolder = null; openMe(); toast('Stopped watching.'); }catch(e){ toast(errMsg(e)); btn.disabled = false; }
+}
+function figmaMeHTML(){
+  if(!figLinked) return `<div class="field"><span class="lbl">Figma</span><span class="muted small">Your new Figma versions show up ready to stamp.</span><button type="button" class="btn ghost small" data-act="fig-link" style="justify-self:start">Connect Figma</button></div>`;
+  if(figFolder) return `<div class="field"><span class="lbl">Figma</span><span class="small">Watching <b>${esc(figFolder.folder_name || 'your folder')}</b>. New versions you save land in your Tray.</span><button type="button" class="btn ghost small" data-act="fig-unwatch" style="justify-self:start">Stop watching</button></div>`;
+  return `<div class="field"><label class="lbl" for="fg-link">Figma folder to watch</label><span class="muted small">Open the folder in Figma, copy the link from the address bar, paste it here. Once.</span><div class="repo-row"><input id="fg-link" placeholder="figma.com/files/…/project/…" autocapitalize="off" autocomplete="off" spellcheck="false"><button type="button" class="btn small" data-act="fig-watch">Watch</button></div></div>`;
+}
+function figTitle(x){ return (x.label && x.label.trim()) || (x.file_name ? 'Updated ' + x.file_name : 'New Figma version'); }
+function figListHTML(){
+  return figTray.map(x => `<li><button type="button" data-act="pick-fig" data-v="${esc(x.id)}" aria-pressed="false"><span class="cm-t">${esc(figTitle(x))}</span><span class="cm-m">${esc(x.file_name || 'Figma')} · ${rel(x.at)}</span></button></li>`).join('');
+}
+function pickFig(id){
+  const x = figTray.find(y => y.id === id); if(!x || !stampDraft) return;
+  $$('#st-fig button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === id)));
+  stampDraft.fig = x; $('#st-title').value = figTitle(x).slice(0, 80);
+  if(!$('#st-cap').value && x.description) $('#st-cap').value = x.description.slice(0, 280);
+  stampPreview();
+}
+
 /* ====== Stamps ====== */
 let stampDraft = null;
 /* ---- Tray: your recent GitHub work, found on its own ---- */
@@ -1796,11 +1855,12 @@ function openStamp(prefSha){
   onClose = () => { if(stampDraft && stampDraft.src) URL.revokeObjectURL(stampDraft.src); stampDraft = null; };
   const repo = store.get('kq-repo') || '';
   openSheet(`<h2 id="sheet-title">Make a stamp</h2><form class="sheet-body-grid" data-form="stamp">
-    <div class="seg" role="group" aria-label="Where it's from"><button type="button" data-act="stamp-mode" data-v="github" aria-pressed="true">From GitHub</button><button type="button" data-act="stamp-mode" data-v="photo" aria-pressed="false">Photo or screenshot</button></div>
+    <div class="seg" role="group" aria-label="Where it's from"><button type="button" data-act="stamp-mode" data-v="github" aria-pressed="true">From GitHub</button>${figLinked ? '<button type="button" data-act="stamp-mode" data-v="figma" aria-pressed="false">From Figma</button>' : ''}<button type="button" data-act="stamp-mode" data-v="photo" aria-pressed="false">Photo or screenshot</button></div>
     <div id="st-gh" class="sheet-body-grid">
       ${fresh.length ? `<div class="field"><span class="lbl">Your recent work</span><ul class="commit-list" id="st-commits">${commitListHTML(fresh.slice(0, 8))}</ul></div>` : '<ul class="commit-list" id="st-commits"></ul>'}
       <details class="other-repo"${fresh.length ? '' : ' open'}><summary>${fresh.length ? 'Another project' : 'Pick a project'}</summary>
         <div class="field"><label for="st-repo" class="sr-only">Project on GitHub</label><div class="repo-row"><input id="st-repo" placeholder="owner/project" value="${esc(repo)}" autocapitalize="off" autocomplete="off" spellcheck="false"><button type="button" class="btn small" data-act="load-commits">Load</button></div></div></details></div>
+    <div id="st-figbox" class="sheet-body-grid" hidden>${figTray.length ? `<div class="field"><span class="lbl">Your recent Figma versions</span><ul class="commit-list" id="st-fig">${figListHTML()}</ul></div>` : `<p class="muted small" style="margin:0">${figFolder ? 'Nothing new yet. Save a version in Figma (File, then Save to version history) and it shows up here.' : 'Pick a Figma folder to watch in You first.'}</p>`}</div>
     <div id="st-photo" class="sheet-body-grid" hidden>
       <label class="dropzone photo-pick"><b id="st-photo-l">Add a screenshot or photo</b><span class="muted small">Blur anything private first</span><input type="file" accept="image/*" id="st-file"></label></div>
     <div class="field"><label for="st-title">Title</label><input id="st-title" maxlength="80" autocomplete="off"></div>
@@ -1813,7 +1873,7 @@ function openStamp(prefSha){
 }
 function stampDraftPost(){
   return {kind:'ship', title:($('#st-title').value || '').trim() || 'Untitled', stat:($('#st-stat').value || '').trim() || null, unit:($('#st-unit').value || '').trim() || null,
-    source:stampDraft.mode === 'github' ? 'github' : 'screenshot', mark:stampDraft.mode === 'github' && stampDraft.pick ? stampDraft.pick.mark : null,
+    source:stampDraft.mode === 'github' ? 'github' : stampDraft.mode === 'figma' ? 'figma' : 'screenshot', mark:stampDraft.mode === 'github' && stampDraft.pick ? stampDraft.pick.mark : null,
     clip:stampDraft.mode === 'github' && stampDraft.pick ? stampDraft.pick.clip : null,
     created_at:new Date().toISOString(), author:me.id, _crew:cur};
 }
@@ -1821,6 +1881,7 @@ function stampPreview(){
   const el = $('#st-prev'); if(!el || !stampDraft) return;
   const p = stampDraftPost();
   if(stampDraft.mode === 'photo' && stampDraft.src){ p.image_path = '__draft'; urls.__draft = {url:stampDraft.src, exp:Infinity}; }
+  if(stampDraft.mode === 'figma' && stampDraft.fig && stampDraft.fig.thumb_path) p.image_path = stampDraft.fig.thumb_path;
   el.innerHTML = stampHTML(p, 'md');
 }
 async function gh(path){
@@ -1863,6 +1924,7 @@ async function postStamp(form){
   const to = $$('input[name="to"]:checked', form).map(i => i.value), title = ($('#st-title').value || '').trim();
   if(!title){ toast('Give it a title.'); $('#st-title').focus(); return; }
   if(stampDraft.mode === 'photo' && !stampDraft.file){ toast('Add a screenshot or photo, or switch to GitHub.'); return; }
+  if(stampDraft.mode === 'figma' && !stampDraft.fig){ toast('Pick a Figma version.'); return; }
   if(!to.length){ toast('Pick at least one crew.'); return; }
   const btn = form.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Printing…';
   try{
@@ -1873,7 +1935,10 @@ async function postStamp(form){
       row.image_path = `${me.id}/${crypto.randomUUID()}.jpg`;
       await q(sb.storage.from('snaps').upload(row.image_path, blob, {contentType:'image/jpeg', upsert:false}));
     }
+    const fig = stampDraft.mode === 'figma' ? stampDraft.fig : null;
+    if(fig){ row.image_path = fig.thumb_path || null; row.clip = {type:'figma', file_key:fig.file_key, version_id:fig.version_id}; }
     await publish(row, to, $$('input[name="answers"]:checked', form).map(i => i.value));
+    if(fig){ figTray = figTray.filter(x => x.id !== fig.id); q(sb.from('figma_tray').delete().eq('id', fig.id)).catch(() => {}); }
   }catch(e){ toast(errMsg(e)); btn.disabled = false; btn.textContent = 'Print and post'; }
 }
 
@@ -1929,6 +1994,8 @@ function openMe(){
     <div class="field"><label for="me-name">Name</label><input id="me-name" maxlength="60" value="${esc(profile.name || '')}" autocomplete="name"></div>
     <button class="btn" type="submit" style="justify-self:start">Save</button>
     <hr style="border:0;border-top:1px solid var(--line);width:100%;margin:4px 0">
+    ${figmaMeHTML()}
+    <hr style="border:0;border-top:1px solid var(--line);width:100%;margin:4px 0">
     ${c ? `<div class="invite-to"><span class="muted small">Current crew</span>${crewChip(c)}</div><button type="button" class="btn ghost small" data-act="leave" style="justify-self:start">Leave this crew</button>` : ''}
     <button type="button" class="btn ghost small" data-act="signout" style="justify-self:start">Sign out</button></form>`);
 }
@@ -1976,22 +2043,28 @@ document.addEventListener('click', async e => {
     case 'snap-place': if(!snapDraft) break; $$('#sn-place button').forEach(b => b.setAttribute('aria-pressed', String(b === el)));
       snapDraft.place = v === 'auto' ? await analyzePlace(snapDraft.src) : {pos:v, ink:(snapDraft.place && snapDraft.place.ink) || 'light'}; snapPreview(); break;
     case 'stamp-mode': if(!stampDraft) break; stampDraft.mode = v; $$('[data-act=stamp-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === el)));
-      $('#st-gh').hidden = v !== 'github'; $('#st-photo').hidden = v !== 'photo'; if(v === 'photo'){ stampDraft.pick = null; } stampPreview(); break;
+      $('#st-gh').hidden = v !== 'github'; $('#st-photo').hidden = v !== 'photo'; { const fb = $('#st-figbox'); if(fb) fb.hidden = v !== 'figma'; } if(v !== 'figma') stampDraft.fig = null; if(v === 'photo'){ stampDraft.pick = null; } stampPreview(); break;
     case 'load-commits': loadCommits(); break;
     case 'pick-commit': pickCommit(v); break;
     case 'tray-pick': openStamp(v); break;
+    case 'tray-fig': openStamp(); { const b = $('[data-act=stamp-mode][data-v=figma]'); if(b){ b.click(); pickFig(v); } } break;
     case 'stamp-photo': openStamp(); { const b = $('[data-act=stamp-mode][data-v=photo]'); if(b) b.click(); } break;
     case 'open': openPost(id); break;
     case 'react': toggleReact(id, v, el); break;
     case 'delete': deletePost(id, el); break;
     case 'me': openMe(); break;
     case 'leave': leaveCrew(el); break;
+    case 'fig-link': linkFigma(el); break;
+    case 'fig-watch': watchFolder(el); break;
+    case 'fig-unwatch': unwatchFolder(el); break;
+    case 'pick-fig': pickFig(v); break;
   }
 });
 document.addEventListener('keydown', e => {
   if(e.key === 'Escape') closeSheet();
   if((e.key === 'Enter' || e.key === ' ') && e.target.matches('.hit')){ e.preventDefault(); e.target.click(); }
   if(e.key === 'Enter' && e.target.id === 'st-repo'){ e.preventDefault(); loadCommits(); }
+  if(e.key === 'Enter' && e.target.id === 'fg-link'){ e.preventDefault(); const b = $('[data-act=fig-watch]'); if(b) watchFolder(b); }
 });
 $('#scrim').addEventListener('click', e => { if(e.target === $('#scrim')) closeSheet(); });
 document.addEventListener('submit', e => {
